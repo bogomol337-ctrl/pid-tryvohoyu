@@ -1,0 +1,132 @@
+name: Оновлення даних
+
+# Щопонеділка о 04:00 UTC (07:00 за Києвом) + кнопка ручного запуску
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tryvoha-update
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Залежності
+        run: pip install telethon pandas
+
+      # База завелика для git. Тримаємо її в кеші між запусками.
+      - name: Дістати базу з кешу
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: messages.db
+          key: tryvoha-db-${{ github.run_id }}
+          restore-keys: tryvoha-db-
+
+      # Перший запуск: кеш порожній — тягнемо базу з релізу
+      - name: Завантажити базу з релізу
+        if: steps.cache.outputs.cache-matched-key == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Кеш порожній — беру базу з релізу seed"
+          gh release download seed --pattern 'messages.db*' --clobber
+          if [ -f messages.db.gz ]; then gunzip -f messages.db.gz; fi
+          ls -la messages.db
+
+      - name: Перевірити базу
+        run: |
+          test -f messages.db || { echo "::error::messages.db відсутня"; exit 1; }
+          echo "Розмір: $(du -h messages.db | cut -f1)"
+          python - <<'PY'
+          import sqlite3
+          c = sqlite3.connect('messages.db')
+          n = c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+          print(f"Повідомлень у базі: {n:,}".replace(',', ' '))
+          PY
+
+      - name: Відновити сесію Telegram
+        env:
+          TG_SESSION_B64: ${{ secrets.TG_SESSION_B64 }}
+        run: |
+          echo "$TG_SESSION_B64" | base64 -d > scraper.session
+          test -s scraper.session || { echo "::error::порожня сесія"; exit 1; }
+
+      - name: Докачати нові повідомлення
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: python update.py
+
+      - name: Перебудувати дані
+        run: |
+          python parse_kpszsu.py
+          python geocode_threats.py
+          python extract_all.py
+
+      - name: Перебудувати сторінки
+        run: |
+          python build_map.py
+          python build_weapons.py
+          python build_zoom_map.py
+          python build_deck_map.py
+          python export_data.py
+
+      - name: Зібрати теку сайту
+        run: |
+          mkdir -p site
+          for pair in \
+            "index.html:index.html" \
+            "pid-tryvohoyu.html:raiony.html" \
+            "tryvoha-threats.html:drony.html" \
+            "ukraine-alert-map.html:oblasti.html" \
+            "zbroya.html:zbroya.html" \
+            "karta.html:karta.html" \
+            "mapa.html:mapa.html" \
+            "events.json:events.json" \
+            "settlements.json:settlements.json" \
+            "raiony_alerts.geojson:raiony_alerts.geojson"
+          do
+            src="${pair%%:*}"; dst="${pair##*:}"
+            if [ -f "$src" ]; then cp "$src" "site/$dst"; else echo "::warning::немає $src"; fi
+          done
+          cp -r data site/data
+          du -sh site
+
+      - name: Опублікувати на Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          npx --yes netlify-cli@17.38.1 deploy \
+            --dir=site --prod \
+            --site "${{ secrets.NETLIFY_SITE_ID }}" \
+            --message "Автооновлення $(date -u +%F)"
+
+      - name: Закомітити відкриті дані
+        run: |
+          git config user.name  "tryvoha-bot"
+          git config user.email "actions@github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Дані станом на $(date -u +%F)"
+          git push || echo "нічого пушити"
+
+      - name: Зберегти базу в кеш
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: messages.db
+          key: tryvoha-db-${{ github.run_id }}
