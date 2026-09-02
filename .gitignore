@@ -1,0 +1,19 @@
+# База завелика для git — вона живе в кеші GitHub Actions
+# і в релізі seed як початковий знімок
+messages.db
+messages.db.gz
+*.session
+*.session-journal
+venv/
+__pycache__/
+site/
+.DS_Store
+
+# Згенеровані сторінки — їх щоразу перебудовує workflow
+tryvoha-threats.html
+zbroya.html
+karta.html
+mapa.html
+events.json
+settlements.json
+.netlify/
