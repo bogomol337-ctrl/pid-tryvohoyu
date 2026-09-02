@@ -166,8 +166,15 @@ class Gazetteer:
         t = low(token).rstrip('ауиіоюеяї')
         return t in OBLAST_WORDS
 
-    def find(self, token, oblast_hint=None, min_rank=4):
-        """Повертає найкращий збіг або None."""
+    def find(self, token, oblast_hint=None, min_rank=4, strict=False):
+        """Повертає найкращий збіг або None.
+
+        strict=True вмикає перевірку схожості: збіг приймається лише коли
+        назва й токен справді близькі. Без цього довідник надто послужливий —
+        «Кілька» знаходить Колки, «Можливо» знаходить Міжлісся, а «Нові»
+        знаходить Новоселицю. Для витягування з телеграм-текстів потрібен
+        саме строгий режим.
+        """
         t = low(token)
         if not t or t in STOP or len(t) < 3 or self.is_oblast_word(t):
             return None
@@ -212,7 +219,16 @@ class Gazetteer:
                 -prefix_len(n, t),
                 abs(len(n) - len(t)),
             )
-        return min(cands, key=score)
+        best = min(cands, key=score)
+        if strict:
+            n, t2 = low(best['name']), t
+            pl = prefix_len(n, t2)
+            shorter = min(len(n), len(t2))
+            # спільний префікс має покривати більшу частину коротшого слова,
+            # а довжини — не розходитись більш ніж на три літери
+            if pl < max(3, int(shorter * 0.7)) or abs(len(n) - len(t2)) > 4:
+                return None
+        return best
 
     def find_all(self, tokens, oblast_hint=None, min_rank=4):
         out, seen = [], set()
