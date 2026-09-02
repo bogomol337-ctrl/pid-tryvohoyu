@@ -16,5 +16,12 @@ karta.html
 mapa.html
 events.json
 settlements.json
+
+# Виняток: це не згенеровані файли, а вхідні дані для збірки
+!raiony_alerts.geojson
+
+# Виняток: це не згенеровані файли, а вхідні дані для збірки
+!raiony_alerts.geojson
 .netlify/
 run.sh
+!raiony_alerts.geojson
