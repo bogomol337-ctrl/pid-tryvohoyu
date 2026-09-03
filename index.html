@@ -1,113 +1,319 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
+<!DOCTYPE html><html lang="uk"><head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Під тривогою — відкриті дані про повітряну загрозу в Україні</title>
-<meta name="description" content="Скільки часу кожен район України прожив під повітряною тривогою з 2022 року. Відкриті дані, три інтерактивні карти.">
-<meta property="og:title" content="Під тривогою">
-<meta property="og:description" content="Скільки часу ваша громада живе під повітряною тривогою. Відкриті дані з 2022 року.">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5">
+<title>Під тривогою — карта повітряних загроз в Україні</title>
+<meta name="description" content="Понад 139 тисяч згадок населених пунктів у повідомленнях про повітряну загрозу з 2022 року. Інтерактивна карта, відкриті дані.">
+<link rel="canonical" href="https://pid-tryvohoyu.netlify.app/">
+<meta name="robots" content="index,follow,max-image-preview:large">
 <meta property="og:type" content="website">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta property="og:site_name" content="Під тривогою">
+<meta property="og:locale" content="uk_UA">
+<meta property="og:title" content="Під тривогою — карта повітряних загроз в Україні">
+<meta property="og:description" content="Понад 139 тисяч згадок населених пунктів у повідомленнях про повітряну загрозу з 2022 року. Інтерактивна карта, відкриті дані.">
+<meta property="og:url" content="https://pid-tryvohoyu.netlify.app/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Під тривогою — карта повітряних загроз">
+<meta name="twitter:description" content="Понад 139 тисяч згадок населених пунктів у повідомленнях про повітряну загрозу з 2022 року. Інтерактивна карта, відкриті дані.">
+<meta name="theme-color" content="#12161A">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Dataset",
+"name":"Під тривогою — згадки населених пунктів у повідомленнях про повітряну загрозу",
+"description":"Понад 139 тисяч згадок населених пунктів у повідомленнях про повітряну загрозу з 2022 року. Інтерактивна карта, відкриті дані.","url":"https://pid-tryvohoyu.netlify.app/","inLanguage":"uk",
+"license":"https://creativecommons.org/licenses/by/4.0/","isAccessibleForFree":true,
+"spatialCoverage":{"@type":"Place","name":"Україна"},
+"creator":{"@type":"Organization","name":"Під тривогою"},
+"distribution":[{"@type":"DataDownload","encodingFormat":"text/csv",
+"contentUrl":"https://pid-tryvohoyu.netlify.app/data/settlements_total.csv"}]}
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@9.0.35/dist.min.js"></script>
 <style>
-:root{--bg:#E6EAEC;--panel:#F4F6F7;--ink:#15181B;--mid:#5B646A;--hair:#C3CBD0;--hot:#AE4220}
-*{box-sizing:border-box}html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;
- font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;line-height:1.5}
-.wrap{max-width:1000px;margin:0 auto;padding:56px 22px 80px}
+:root{--bg:#12161A;--panel:rgba(23,28,34,.93);--ink:#EDF1F4;--mid:#93A0AA;
+ --hair:#2E3841;--hot:#E4622C}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}
+body{font-family:Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;
+ color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
+#map{position:absolute;inset:0}
+.card{position:absolute;z-index:5;background:var(--panel);backdrop-filter:blur(14px);
+ border:1px solid var(--hair);border-radius:8px}
+#panel{top:14px;left:14px;width:296px;padding:17px 18px}
+h1{font-size:18px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px}
+.tag{font-size:11.5px;color:var(--mid);line-height:1.45;margin:0 0 15px}
+.big{font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-bottom:3px}
+.big+div{font-size:11.5px;color:var(--mid);margin-bottom:15px}
+.f{display:block;font-size:11px;color:var(--mid);margin:0 0 5px;
+ text-transform:uppercase;letter-spacing:.06em}
+select{width:100%;font:inherit;font-size:13px;padding:8px 9px;background:#1D242B;
+ border:1px solid var(--hair);border-radius:5px;color:var(--ink);cursor:pointer}
+select:focus{outline:2px solid var(--hot);outline-offset:1px}
+.rng{margin:13px 0 0}
+input[type=range]{width:100%;accent-color:var(--hot);margin:3px 0}
+.chk{margin-top:13px;display:flex;flex-direction:column;gap:6px}
+.chk label{font-size:12.5px;display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--mid)}
+.chk input{accent-color:var(--hot);width:auto;margin:0}
+#gear{top:14px;right:14px;width:42px;height:42px;display:flex;align-items:center;
+ justify-content:center;cursor:pointer;padding:0}
+#gear:hover{border-color:var(--hot)}
+#gear svg{width:19px;height:19px;stroke:var(--ink);fill:none;stroke-width:1.7}
+#drawer{position:absolute;top:0;right:0;bottom:0;width:min(420px,100%);z-index:20;
+ background:var(--panel);backdrop-filter:blur(18px);border-left:1px solid var(--hair);
+ transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+ overflow-y:auto;padding:22px 24px 40px}
+#drawer.on{transform:none}
+#close{position:absolute;top:16px;right:18px;background:none;border:0;color:var(--mid);
+ font-size:26px;line-height:1;cursor:pointer;padding:4px}
+#close:hover{color:var(--ink)}
+#drawer h2{font-size:21px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px}
+#drawer h3{font-size:12px;font-weight:600;color:var(--mid);text-transform:uppercase;
+ letter-spacing:.07em;margin:26px 0 10px}
+#drawer p{font-size:13px;line-height:1.6;color:var(--mid);margin:0 0 12px}
+.rank{width:100%;border-collapse:collapse;font-size:13px}
+.rank td{padding:6px 0;border-bottom:1px solid var(--hair)}
+.rank td:last-child{text-align:right;font-weight:600;white-space:nowrap}
+.rank .bar{width:42%}
+.rank .bar div{height:6px;background:#252E36;border-radius:3px;overflow:hidden}
+.rank .bar i{display:block;height:100%;background:var(--hot)}
+.links{display:grid;gap:1px;margin-top:8px}
+.links a{display:block;padding:12px 0;border-bottom:1px solid var(--hair);
+ color:var(--ink);text-decoration:none;font-size:14px;font-weight:500}
+.links a span{display:block;font-size:12px;color:var(--mid);font-weight:400;margin-top:2px}
+.links a:hover{color:var(--hot)}
+.warn{border:1px solid #6E2A18;background:rgba(110,42,24,.16);border-radius:6px;
+ padding:13px 15px;font-size:12.5px;line-height:1.6;color:#E9BCA9;margin-top:22px}
+.warn b{color:#fff}
+#tip{position:absolute;z-index:9;pointer-events:none;display:none;
+ background:rgba(9,12,15,.96);border:1px solid var(--hair);color:var(--ink);
+ padding:10px 13px;border-radius:6px;font-size:12.5px;line-height:1.5;max-width:250px}
+#tip b{font-size:14px}#tip span{color:var(--mid)}
+#legend{bottom:14px;left:14px;padding:11px 14px;font-size:11.5px;color:var(--mid)}
+#legend .hint{margin-top:7px;padding-top:7px;border-top:1px solid var(--hair);
+ font-size:11px;opacity:.85}
+#legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+.maplibregl-ctrl-group{background:var(--panel)!important;border:1px solid var(--hair)!important}
+.maplibregl-ctrl-icon{filter:invert(1) hue-rotate(180deg)}
+@media(max-width:640px){
+  #panel{width:auto;right:70px;padding:13px 14px}
+  h1{font-size:16px}.big{font-size:26px}.tag{display:none}
+  #legend{display:none}
+  #drawer{width:100%;padding:20px 18px 40px}
+}
+</style></head><body>
+<div id="map"></div>
+<div id="tip"></div>
 
-h1{font-size:clamp(34px,6vw,62px);font-weight:700;letter-spacing:-.035em;line-height:1;margin:0 0 18px;max-width:15ch}
-.lede{max-width:56ch;font-size:17px;line-height:1.6;color:var(--mid);margin:0 0 44px}
-.lede b{color:var(--ink);font-weight:500}
-
-.figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:26px;
- border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);padding:26px 0;margin-bottom:52px}
-.figures div b{display:block;font-size:clamp(28px,4vw,38px);font-weight:700;letter-spacing:-.03em;line-height:1}
-.figures div span{display:block;font-size:13px;color:var(--mid);margin-top:7px;max-width:22ch}
-
-h2{font-size:13px;font-weight:500;color:var(--mid);margin:0 0 18px}
-.cards{display:grid;gap:2px;margin-bottom:56px}
-a.card{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:baseline;
- padding:22px 0;border-bottom:1px solid var(--hair);text-decoration:none;color:inherit}
-a.card:first-child{border-top:1px solid var(--hair)}
-a.card:hover strong{color:var(--hot)}
-a.card strong{display:block;font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:5px}
-a.card em{font-style:normal;font-size:14px;color:var(--mid);display:block;max-width:52ch}
-a.card .go{font-size:14px;color:var(--mid);white-space:nowrap}
-a.card:hover .go{color:var(--hot)}
-
-.method{border-top:1px solid var(--hair);padding-top:26px;max-width:66ch;font-size:14px;color:var(--mid)}
-.method h3{font-size:15px;font-weight:600;color:var(--ink);margin:0 0 10px}
-.method p{margin:0 0 14px}
-.method b{color:var(--ink);font-weight:500}
-.method a{color:var(--ink)}
-footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--hair);font-size:13px;color:var(--mid)}
-</style>
-</head>
-<body>
-<div class="wrap">
-
+<div class="card" id="panel">
   <h1>Під тривогою</h1>
-  <p class="lede">Відкриті дані про те, скільки часу Україна прожила під повітряною загрозою. Зібрано з офіційних сповіщень про тривогу та повідомлень Повітряних Сил ЗСУ, <b>з березня 2022 по серпень 2026</b>.</p>
-
-  <div class="figures">
-    <div><b>297 288</b><span>сповіщень про тривогу</span></div>
-    <div><b>96,8%</b><span>часу під тривогою прожив Нікопольський район</span></div>
-    <div><b>1 281</b><span>населений пункт на маршрутах ударних дронів</span></div>
-    <div><b>6 308</b><span>оголошень ракетної небезпеки</span></div>
+  <p class="tag">Населені пункти, які називали в повідомленнях про повітряну загрозу з 2022 року. Наближайте, щоб дійти до сіл.</p>
+  <div class="big" id="s-num">···</div>
+  <div id="s-sub">завантаження даних</div>
+  <label class="f" for="cls">Тип події</label>
+  <select id="cls"><option value="-1">усі</option></select>
+  <div class="rng">
+    <label class="f">Період: <span id="mlabel"></span></label>
+    <input type="range" id="m0" min="0" value="0" aria-label="початок періоду">
+    <input type="range" id="m1" min="0" value="0" aria-label="кінець періоду">
   </div>
-
-  <h2>Шість розділів</h2>
-  <div class="cards">
-    <a class="card" href="./mapa.html">
-      <span><strong>Головна карта загроз</strong>
-      <em>Усі згадки населених пунктів у повідомленнях про повітряну загрозу. Теплові плями, фільтр за типом цілі, повзунок періоду. Наближайте до окремого села.</em></span>
-      <span class="go">Відкрити</span>
-    </a>
-    <a class="card" href="./karta.html">
-      <span><strong>Карта тривог по районах</strong>
-      <em>Уся країна на одній карті: заливка районів за часом під тривогою, крапки населених пунктів на маршрутах дронів. Наближайте до окремого міста.</em></span>
-      <span class="go">Відкрити</span>
-    </a>
-    <a class="card" href="./raiony.html">
-      <span><strong>Скільки часу живе під тривогою ваша громада</strong>
-      <em>Введіть назву громади або району — побачите свою частку часу під тривогою, місце серед 118 районів і як це виглядає поруч із рештою країни.</em></span>
-      <span class="go">Відкрити</span>
-    </a>
-    <a class="card" href="./drony.html">
-      <span><strong>Куди летіли ударні дрони</strong>
-      <em>Понад тисяча населених пунктів, які Повітряні Сили називали в оперативних попередженнях. Окремо — ракетна небезпека по областях.</em></span>
-      <span class="go">Відкрити</span>
-    </a>
-    <a class="card" href="./zbroya.html">
-      <span><strong>Чим били по Україні</strong>
-      <em>Динаміка засобів повітряного нападу по місяцях: ударні БпЛА, балістика, крилаті ракети, кількість локацій влучань.</em></span>
-      <span class="go">Відкрити</span>
-    </a>
-    <a class="card" href="./oblasti.html">
-      <span><strong>Уся війна, область за областю</strong>
-      <em>Динаміка з 2022 по 2026 рік: години тривог, кількість, людино-години. Видно, як змінювалася географія загрози.</em></span>
-      <span class="go">Відкрити</span>
-    </a>
+  <div class="chk">
+    <label><input type="checkbox" id="l-heat" checked> теплові плями</label>
+    <label><input type="checkbox" id="l-pts" checked> населені пункти</label>
   </div>
-
-  <div class="method">
-    <h3>Що ці дані означають, а що ні</h3>
-    <p><b>Тривога — це не влучання.</b> Дані показують, де оголошували загрозу, а не куди падало. У прифронтових районах тривогу вмикають на підлітний час у кілька хвилин, а в тилу — на весь маршрут ракети через півкраїни. Це різні речі.</p>
-    <p><b>Великі міста завищені.</b> Їх називають частіше не тому, що там небезпечніше, а тому, що вони служать орієнтирами для опису курсу цілі. Село поруч із Харковом окремо не назвуть.</p>
-    <p><b>Минуле не передбачає майбутнє.</b> За час війни дальність ударних засобів зростала, і райони, тихі у 2022-му, такими не залишились. Не ухвалюйте рішення про переїзд лише за цими картами.</p>
-    <p><b>Повнота джерела змінювалася.</b> У 2022 році Повітряні Сили публікували вчетверо менше повідомлень, ніж зараз. Порожня карта за ранній період означає брак даних, а не спокій.</p>
-    <h3>Джерела</h3>
-    <p>Сповіщення про тривоги — датасет <a href="https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset">Vadimkin</a> на основі офіційного каналу «Повітряна тривога». Оперативні попередження — канал Повітряних Сил ЗСУ. Довідник населених пунктів — <a href="https://github.com/kse-ua/KSE-Loc-Data-Hub">KSE Loc Data Hub</a>. Межі районів — <a href="https://github.com/slawomirmatuszak/ukrainian_geodata">ukrainian_geodata</a>.</p>
-  </div>
-
-  <div class="method" style="border-top:1px solid var(--hair);margin-top:26px;padding-top:26px">
-    <h3>Відкриті дані</h3>
-    <p>Усі агрегати доступні у CSV під ліцензією CC BY 4.0 — беріть і користуйтеся. Сирі тексти повідомлень не публікуються: це чужий контент, а користь дають саме агрегати. <a href="./data/README.md">Опис файлів і методика</a>.</p>
-  </div>
-  <footer>Некомерційний проєкт. Дані відкриті, користуйтеся вільно.</footer>
 </div>
-</body>
-</html>
+
+<button class="card" id="gear" aria-label="Статистика та розділи">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V10a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+</button>
+
+<aside id="drawer" aria-label="Додаткова статистика">
+  <button id="close" aria-label="Закрити">&times;</button>
+  <h2>Що показують дані</h2>
+  <p>Мапа побудована на повідомленнях каналів, які попереджають про повітряну загрозу. Кожна згадка населеного пункту — момент, коли над ним або в його бік летіла ціль.</p>
+  <h3>Області за кількістю згадок</h3>
+  <table class="rank"><tbody id="obl"></tbody></table>
+  <h3>Найбільше згадок</h3>
+  <table class="rank"><tbody id="topp"></tbody></table>
+  <h3>Найменше згадок</h3>
+  <table class="rank"><tbody id="botp"></tbody></table>
+  <div class="warn">
+    <b>Це не рейтинг безпеки.</b> Згадка про загрозу — не влучання. Більшість цілей збили або вони пройшли повз. Великі міста згадують частіше, бо вони служать орієнтирами для опису курсу. Прифронтові громади, навпаки, недорепортяться. Не ухвалюйте рішення про переїзд за цією мапою.
+  </div>
+  <h3>Інші розділи</h3>
+  <nav class="links">
+    <a href="./raiony.html">Скільки часу живе під тривогою ваша громада<span>Пошук серед 1431 громади та 118 районів</span></a>
+    <a href="./karta.html">Карта тривог по районах<span>Заливка за часом під тривогою</span></a>
+    <a href="./zbroya.html">Чим били по Україні<span>Динаміка типів озброєння по місяцях</span></a>
+    <a href="./oblasti.html">Уся війна, область за областю<span>2022–2026, години тривог</span></a>
+    <a href="./about.html">Про проєкт і джерела<span>Методика, застереження, відкриті дані</span></a>
+  </nav>
+</aside>
+
+<div class="card" id="legend">
+  <div><i style="background:#F2D08A"></i>рідко</div>
+  <div><i style="background:#E4622C"></i>часто</div>
+  <div><i style="background:#8E1F16"></i>дуже часто</div>
+  <div class="hint">клік по крапці — наблизити</div>
+</div>
+
+<script>
+const {MapboxOverlay,ScatterplotLayer,HeatmapLayer,TextLayer}=deck;
+const $=i=>document.getElementById(i);
+let D=null, agg=null, maxC=1, overlay=null, zoom=5.4, mapRef=null;
+
+const RAMP=[[250,238,200],[242,208,138],[233,160,74],[228,98,44],[178,44,26],[120,20,14]];
+function color(t,a){
+  const x=Math.min(.999,Math.max(0,t))*(RAMP.length-1);
+  const i=Math.floor(x), f=x-i, p=RAMP[i], q=RAMP[Math.min(i+1,5)];
+  return [p[0]+(q[0]-p[0])*f, p[1]+(q[1]-p[1])*f, p[2]+(q[2]-p[2])*f, a];
+}
+
+function recompute(){
+  const c=+$('cls').value;
+  let a=+$('m0').value, b=+$('m1').value;
+  if(a>b){const t=a;a=b;b=t;}
+  $('mlabel').textContent = D.months[a]===D.months[b]
+    ? D.months[a] : D.months[a]+' — '+D.months[b];
+  agg=new Float64Array(D.places.length);
+  const cl=D.cells;
+  for(let i=0;i<cl.length;i+=4){
+    const mi=cl[i+1];
+    if(mi<a||mi>b) continue;
+    if(c>=0 && cl[i+2]!==c) continue;
+    agg[cl[i]]+=cl[i+3];
+  }
+  maxC=1; let tot=0, np=0;
+  for(let i=0;i<agg.length;i++){const v=agg[i]; if(v>maxC)maxC=v; tot+=v; if(v)np++;}
+  $('s-num').textContent=tot.toLocaleString('uk');
+  $('s-sub').textContent='згадок у '+np.toLocaleString('uk')+' населених пунктах';
+  fillRanks();
+  render();
+}
+
+function bars(el, rows, max){
+  $(el).innerHTML=rows.map(function(r){
+    return '<tr><td>'+r[0]+'</td><td class="bar"><div><i style="width:'
+      +(r[1]/max*100).toFixed(1)+'%"></i></div></td><td>'
+      +Math.round(r[1]).toLocaleString('uk')+'</td></tr>';
+  }).join('');
+}
+function fillRanks(){
+  bars('obl', D.oblasts.slice(0,12), D.oblasts[0][1]);
+  const idx=[];
+  for(let i=0;i<agg.length;i++) if(agg[i]>0) idx.push(i);
+  idx.sort(function(x,y){return agg[y]-agg[x];});
+  const nm=function(i){return D.places[i][0]
+    +' <span style="color:#93A0AA">· '+D.places[i][1]+'</span>';};
+  if(!idx.length) return;
+  bars('topp', idx.slice(0,10).map(function(i){return [nm(i),agg[i]];}), agg[idx[0]]);
+  const tail=idx.slice(-10).reverse();
+  bars('botp', tail.map(function(i){return [nm(i),agg[i]];}), agg[tail[0]]||1);
+}
+
+// Плавна передача естафети між шарами: далеко — плями, близько — крапки.
+// Коли обидва малювались на повну, виходили «бублики».
+function heatOp(z){ return z<6.5 ? .85 : z>9 ? 0 : .85*(9-z)/2.5; }
+function ptsOp(z){ return z<6.5 ? .35 : z>9 ? .92 : .35+.57*(z-6.5)/2.5; }
+
+function render(){
+  if(!overlay||!agg) return;
+  const idx=[];
+  for(let i=0;i<agg.length;i++) if(agg[i]>0) idx.push(i);
+  const L=[];
+  if($('l-heat').checked && heatOp(zoom)>0.01) L.push(new HeatmapLayer({
+    id:'heat', data:idx,
+    getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
+    getWeight:function(i){return agg[i];},
+    radiusPixels:46, intensity:1.25, threshold:.06, opacity:heatOp(zoom),
+    colorRange:[[120,60,20,0],[190,110,40,150],[224,140,50,190],
+                [230,98,44,215],[186,46,26,235],[130,18,12,250]],
+    updateTriggers:{getWeight:agg}
+  }));
+  if($('l-pts').checked) L.push(new ScatterplotLayer({
+    id:'pts', data:idx, pickable:true,
+    getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
+    getRadius:function(i){return Math.pow(agg[i]/maxC,.42)*8000+500;},
+    radiusMinPixels:1.8, radiusMaxPixels:30,
+    getFillColor:function(i){return color(Math.pow(agg[i]/maxC,.42), 235);},
+    opacity:ptsOp(zoom), stroked:false,
+    onHover:function(info){
+      const t=$('tip');
+      if(!info||info.object===undefined||info.object===null){t.style.display='none';return;}
+      const i=info.object, p=D.places[i], n=agg[i], j=D.jets[i]||0;
+      t.style.display='block';
+      t.style.left=Math.min(info.x+16, innerWidth-262)+'px';
+      t.style.top=(info.y+16)+'px';
+      t.innerHTML='<b>'+p[0]+'</b><br><span>'+(p[2]?p[2]+' р-н, ':'')+p[1]+'</span>'
+        +'<br>'+Math.round(n).toLocaleString('uk')+' згадок про загрозу'
+        +(j/Math.max(n,1)>.05?'<br><span>реактивних: '+Math.round(j/n*100)+'%</span>':'');
+    },
+    onClick:function(info){
+      if(!info||info.object===undefined||!mapRef) return;
+      const p=D.places[info.object];
+      mapRef.flyTo({center:[p[3],p[4]], zoom:Math.max(mapRef.getZoom(),10.5),
+                    duration:900});
+    },
+    updateTriggers:{getRadius:[maxC,agg],getFillColor:[maxC,agg]}
+  }));
+  // Підписи з'являються тільки зблизька — інакше карта перетворюється на кашу.
+  if(zoom>=8.6 && $('l-pts').checked){
+    const lab=idx.slice().sort(function(a,b){return agg[b]-agg[a];}).slice(0,220);
+    L.push(new TextLayer({
+      id:'lbl', data:lab,
+      getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
+      getText:function(i){return D.places[i][0];},
+      getSize:function(i){return agg[i]>maxC*.25?13:11.5;},
+      getColor:[237,241,244,235],
+      getPixelOffset:[0,-14],
+      fontFamily:'Inter, system-ui, sans-serif', fontWeight:600,
+      outlineWidth:3, outlineColor:[9,12,15,235], fontSettings:{sdf:true},
+      getTextAnchor:'middle', getAlignmentBaseline:'bottom',
+      characterSet:'auto',
+      updateTriggers:{getSize:[maxC,agg],getText:agg}
+    }));
+  }
+  overlay.setProps({layers:L});
+}
+
+$('gear').onclick=function(){$('drawer').classList.add('on');};
+$('close').onclick=function(){$('drawer').classList.remove('on');};
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')$('drawer').classList.remove('on');});
+
+fetch('events.json').then(function(r){return r.json();}).then(function(j){
+  D=j;
+  D.classes.forEach(function(c,i){$('cls').insertAdjacentHTML('beforeend',
+    '<option value="'+i+'">'+c+'</option>');});
+  const last=D.months.length-1;
+  $('m0').max=last; $('m1').max=last; $('m0').value=0; $('m1').value=last;
+
+  const map=new maplibregl.Map({
+    container:'map',
+    style:'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    center:[31.3,48.8], zoom:5.4, minZoom:4.5, maxZoom:14,
+    dragRotate:false
+  });
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right');
+  overlay=new MapboxOverlay({interleaved:false, layers:[]});
+  map.addControl(overlay);
+  mapRef=map;
+  let pending=false, lastBand=-1;
+  function band(z){ return z<6.5?0 : z>9?2 : 1; }
+  map.on('zoom',function(){
+    zoom=map.getZoom();
+    const b=band(zoom);
+    // у крайніх смугах прозорість стала — перемальовувати нема сенсу
+    if(b===lastBand && b!==1) return;
+    lastBand=b;
+    if(pending) return;
+    pending=true;
+    requestAnimationFrame(function(){pending=false; render();});
+  });
+  map.on('load',recompute);
+  ['cls','m0','m1'].forEach(function(i){$(i).oninput=recompute;});
+  ['l-heat','l-pts'].forEach(function(i){$(i).onchange=render;});
+}).catch(function(e){
+  $('s-num').textContent='—';
+  $('s-sub').textContent='не вдалося завантажити дані';
+  console.error(e);
+});
+</script></body></html>

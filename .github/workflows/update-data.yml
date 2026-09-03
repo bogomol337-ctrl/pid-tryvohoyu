@@ -1,9 +1,10 @@
 name: Оновлення даних
 
-# Щопонеділка о 04:00 UTC (07:00 за Києвом) + кнопка ручного запуску
+# Першого числа кожного місяця о 04:00 UTC (07:00 за Києвом)
+# плюс кнопка ручного запуску
 on:
   schedule:
-    - cron: "0 4 * * 1"
+    - cron: "0 4 1 * *"
   workflow_dispatch:
 
 permissions:
@@ -63,7 +64,7 @@ jobs:
         env:
           TG_SESSION_B64: ${{ secrets.TG_SESSION_B64 }}
         run: |
-          echo "$TG_SESSION_B64" | base64 -d | gunzip > scraper.session
+          echo "$TG_SESSION_B64" | base64 -d > scraper.session
           test -s scraper.session || { echo "::error::порожня сесія"; exit 1; }
 
       - name: Докачати нові повідомлення
@@ -91,6 +92,9 @@ jobs:
           mkdir -p site
           for pair in \
             "index.html:index.html" \
+            "about.html:about.html" \
+            "robots.txt:robots.txt" \
+            "sitemap.xml:sitemap.xml" \
             "pid-tryvohoyu.html:raiony.html" \
             "tryvoha-threats.html:drony.html" \
             "ukraine-alert-map.html:oblasti.html" \

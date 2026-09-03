@@ -1,32 +1,34 @@
 # -*- coding: utf-8 -*-
 """
-Карта на deck.gl (WebGL) поверх MapLibre.
-
-Читає таблицю events (її створює extract_all.py) і будує сторінку,
-що тягне сотні тисяч точок без падіння FPS.
+Головна сторінка проєкту: карта повітряних загроз на deck.gl.
 
     python build_deck_map.py
 
-На виході: mapa.html + events.json
+Читає таблицю events (створює extract_all.py).
+На виході: index.html, events.json, robots.txt, sitemap.xml
+Стара титульна сторінка тепер живе в about.html.
 """
 
 import sqlite3, json, os, sys, collections
 
 DB = sys.argv[1] if len(sys.argv) > 1 else 'messages.db'
+SITE = os.environ.get('TRYVOHA_URL', 'https://pid-tryvohoyu.netlify.app')
 
-CLASS = {'drone': 0, 'ballistic': 1, 'cruise': 1, 'kinzhal': 1, 'antiship': 1,
-         'guided_air': 1, 'missile_alert': 1, 'kab': 2, 'recon': 3, 'target': 4}
-CLASS_NAME = ['Ударні БпЛА', 'Ракети', 'КАБи', 'Розвідувальні', 'Тип не вказано']
+CLASS = {'drone': 0, 'shahed': 0,
+         'ballistic': 1, 'cruise': 1, 'kinzhal': 1, 'antiship': 1,
+         'guided_air': 1, 'missile_alert': 1,
+         'kab': 2, 'explosion': 3, 'ppo': 4, 'recon': 5, 'target': 5}
+CLASS_NAME = ['Ударні БпЛА', 'Ракети', 'КАБи', 'Вибухи', 'Робота ППО', 'Інше']
 
 con = sqlite3.connect(DB)
 rows = con.execute("""
     SELECT settlement, oblast, raion, lat, lon, weapon, jet, substr(ts,1,7)
     FROM events WHERE lat IS NOT NULL AND ts >= '2022-02-24'""").fetchall()
-print(f"Подій у базі: {len(rows):,}".replace(',', ' '))
+print(f"Подій: {len(rows):,}".replace(',', ' '))
 
 places, months = {}, {}
-cells = collections.Counter()          # (place, month, class) -> кількість
-jets = collections.Counter()
+cells, jets = collections.Counter(), collections.Counter()
+by_oblast = collections.Counter()
 
 for st, obl, rai, lat, lon, weapon, jet, ym in rows:
     key = (st, obl)
@@ -34,127 +36,214 @@ for st, obl, rai, lat, lon, weapon, jet, ym in rows:
         places[key] = [st, (obl or '').replace(' область', ''),
                        (rai or '').replace(' район', ''),
                        round(lon, 5), round(lat, 5)]
-    if ym not in months:
-        months[ym] = len(months)
-    pi = list(places).index(key) if False else None   # заповнимо нижче
+    months.setdefault(ym, None)
+
 place_idx = {k: i for i, k in enumerate(places)}
 month_list = sorted(months)
 month_idx = {m: i for i, m in enumerate(month_list)}
 
 for st, obl, rai, lat, lon, weapon, jet, ym in rows:
     pi = place_idx[(st, obl)]
-    cells[(pi, month_idx[ym], CLASS.get(weapon, 0))] += 1
+    cells[(pi, month_idx[ym], CLASS.get(weapon, 5))] += 1
     if jet:
         jets[pi] += 1
+    by_oblast[(obl or '').replace(' область', '')] += 1
 
 flat = []
 for (pi, mi, ci), n in cells.items():
     flat.extend([pi, mi, ci, n])
 
-payload = {
-    'places': list(places.values()),
-    'months': month_list,
-    'classes': CLASS_NAME,
-    'cells': flat,                      # плоский масив по 4 числа
-    'jets': [jets.get(i, 0) for i in range(len(places))],
-}
+# Рейтинг областей. Свідомо зветься «згадок про загрозу», а не «небезпека»:
+# джерело фіксує, де оголошували загрозу, а не куди падало.
+obl_rank = [[o, n] for o, n in by_oblast.most_common() if o]
+
+payload = {'places': list(places.values()), 'months': month_list,
+           'classes': CLASS_NAME, 'cells': flat,
+           'jets': [jets.get(i, 0) for i in range(len(places))],
+           'oblasts': obl_rank}
 json.dump(payload, open('events.json', 'w'), ensure_ascii=False,
           separators=(',', ':'))
-print(f"Населених пунктів: {len(places):,}".replace(',', ' '))
-print(f"Місяців: {len(month_list)} ({month_list[0]} — {month_list[-1]})"
-      if month_list else "Порожньо")
-print(f"Комірок: {len(cells):,}".replace(',', ' '),
-      f"→ events.json ({os.path.getsize('events.json')//1024} KB)")
 
+print(f"НП: {len(places):,}".replace(',', ' '),
+      f"| місяців: {len(month_list)}",
+      f"| events.json {os.path.getsize('events.json') // 1024} KB")
 top = collections.Counter()
 for (pi, mi, ci), n in cells.items():
     top[pi] += n
-print("Топ-8:", ', '.join(
-    f"{payload['places'][i][0]} ({n})" for i, n in top.most_common(8)))
+print("Топ-8:", ', '.join(f"{payload['places'][i][0]} ({n})"
+                          for i, n in top.most_common(8)))
 
-HTML = r"""<!DOCTYPE html><html lang="uk"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Карта повітряних загроз — Під тривогою</title>
+TOTAL = sum(v for _, v in obl_rank)
+DESC = (f"Понад {TOTAL // 1000} тисяч згадок населених пунктів у повідомленнях "
+        f"про повітряну загрозу з 2022 року. Інтерактивна карта, відкриті дані.")
+
+HTML = r"""<!DOCTYPE html><html lang="uk"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5">
+<title>Під тривогою — карта повітряних загроз в Україні</title>
+<meta name="description" content="__DESC__">
+<link rel="canonical" href="__SITE__/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Під тривогою">
+<meta property="og:locale" content="uk_UA">
+<meta property="og:title" content="Під тривогою — карта повітряних загроз в Україні">
+<meta property="og:description" content="__DESC__">
+<meta property="og:url" content="__SITE__/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Під тривогою — карта повітряних загроз">
+<meta name="twitter:description" content="__DESC__">
+<meta name="theme-color" content="#12161A">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Dataset",
+"name":"Під тривогою — згадки населених пунктів у повідомленнях про повітряну загрозу",
+"description":"__DESC__","url":"__SITE__/","inLanguage":"uk",
+"license":"https://creativecommons.org/licenses/by/4.0/","isAccessibleForFree":true,
+"spatialCoverage":{"@type":"Place","name":"Україна"},
+"creator":{"@type":"Organization","name":"Під тривогою"},
+"distribution":[{"@type":"DataDownload","encodingFormat":"text/csv",
+"contentUrl":"__SITE__/data/settlements_total.csv"}]}
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/deck.gl@9.0.35/dist.min.js"></script>
 <style>
-:root{--ink:#15181B;--mid:#5B646A;--hair:#C3CBD0;--panel:#F4F6F7;--hot:#AE4220}
+:root{--bg:#12161A;--panel:rgba(23,28,34,.93);--ink:#EDF1F4;--mid:#93A0AA;
+ --hair:#2E3841;--hot:#E4622C}
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}
-body{font-family:Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink)}
+body{font-family:Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;
+ color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
 #map{position:absolute;inset:0}
-canvas{outline:none}
-.maplibregl-canvas{cursor:grab}
-.maplibregl-canvas:active{cursor:grabbing}
-.card{position:absolute;z-index:5;background:rgba(244,246,247,.96);
- backdrop-filter:blur(8px);border:1px solid var(--hair);border-radius:5px}
-#panel{top:14px;left:14px;width:300px;padding:16px 17px;max-height:calc(100% - 28px);overflow:auto}
-h1{font-size:19px;font-weight:700;letter-spacing:-.02em;margin:0 0 5px}
-.s{font-size:12.5px;color:var(--mid);line-height:1.5;margin:0 0 14px}
-.f{display:block;font-size:12px;color:var(--mid);margin:13px 0 5px}
-select,input[type=range]{width:100%}
-select{font:inherit;font-size:13px;padding:6px 8px;background:#fff;
- border:1px solid var(--hair);border-radius:3px;color:var(--ink)}
-input[type=range]{accent-color:var(--hot);margin:2px 0}
-.lay{margin-top:11px;display:flex;flex-direction:column;gap:5px}
-.lay label{font-size:12.5px;display:flex;align-items:center;gap:7px;cursor:pointer}
-.lay input{accent-color:var(--hot);margin:0;width:auto}
-#stat{border-top:1px solid var(--hair);margin-top:13px;padding-top:12px;font-size:13px}
-#stat b{display:block;font-size:15px;font-weight:600}
-#stat .n{font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.card{position:absolute;z-index:5;background:var(--panel);backdrop-filter:blur(14px);
+ border:1px solid var(--hair);border-radius:8px}
+#panel{top:14px;left:14px;width:296px;padding:17px 18px}
+h1{font-size:18px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px}
+.tag{font-size:11.5px;color:var(--mid);line-height:1.45;margin:0 0 15px}
+.big{font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-bottom:3px}
+.big+div{font-size:11.5px;color:var(--mid);margin-bottom:15px}
+.f{display:block;font-size:11px;color:var(--mid);margin:0 0 5px;
+ text-transform:uppercase;letter-spacing:.06em}
+select{width:100%;font:inherit;font-size:13px;padding:8px 9px;background:#1D242B;
+ border:1px solid var(--hair);border-radius:5px;color:var(--ink);cursor:pointer}
+select:focus{outline:2px solid var(--hot);outline-offset:1px}
+.rng{margin:13px 0 0}
+input[type=range]{width:100%;accent-color:var(--hot);margin:3px 0}
+.chk{margin-top:13px;display:flex;flex-direction:column;gap:6px}
+.chk label{font-size:12.5px;display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--mid)}
+.chk input{accent-color:var(--hot);width:auto;margin:0}
+#gear{top:14px;right:14px;width:42px;height:42px;display:flex;align-items:center;
+ justify-content:center;cursor:pointer;padding:0}
+#gear:hover{border-color:var(--hot)}
+#gear svg{width:19px;height:19px;stroke:var(--ink);fill:none;stroke-width:1.7}
+#drawer{position:absolute;top:0;right:0;bottom:0;width:min(420px,100%);z-index:20;
+ background:var(--panel);backdrop-filter:blur(18px);border-left:1px solid var(--hair);
+ transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+ overflow-y:auto;padding:22px 24px 40px}
+#drawer.on{transform:none}
+#close{position:absolute;top:16px;right:18px;background:none;border:0;color:var(--mid);
+ font-size:26px;line-height:1;cursor:pointer;padding:4px}
+#close:hover{color:var(--ink)}
+#drawer h2{font-size:21px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px}
+#drawer h3{font-size:12px;font-weight:600;color:var(--mid);text-transform:uppercase;
+ letter-spacing:.07em;margin:26px 0 10px}
+#drawer p{font-size:13px;line-height:1.6;color:var(--mid);margin:0 0 12px}
+.rank{width:100%;border-collapse:collapse;font-size:13px}
+.rank td{padding:6px 0;border-bottom:1px solid var(--hair)}
+.rank td:last-child{text-align:right;font-weight:600;white-space:nowrap}
+.rank .bar{width:42%}
+.rank .bar div{height:6px;background:#252E36;border-radius:3px;overflow:hidden}
+.rank .bar i{display:block;height:100%;background:var(--hot)}
+.links{display:grid;gap:1px;margin-top:8px}
+.links a{display:block;padding:12px 0;border-bottom:1px solid var(--hair);
+ color:var(--ink);text-decoration:none;font-size:14px;font-weight:500}
+.links a span{display:block;font-size:12px;color:var(--mid);font-weight:400;margin-top:2px}
+.links a:hover{color:var(--hot)}
+.warn{border:1px solid #6E2A18;background:rgba(110,42,24,.16);border-radius:6px;
+ padding:13px 15px;font-size:12.5px;line-height:1.6;color:#E9BCA9;margin-top:22px}
+.warn b{color:#fff}
 #tip{position:absolute;z-index:9;pointer-events:none;display:none;
- background:rgba(21,24,27,.94);color:#fff;padding:9px 12px;border-radius:4px;
- font-size:12.5px;line-height:1.45;max-width:230px}
-#tip b{font-size:14px}
-#tip span{color:#B9C2C7}
+ background:rgba(9,12,15,.96);border:1px solid var(--hair);color:var(--ink);
+ padding:10px 13px;border-radius:6px;font-size:12.5px;line-height:1.5;max-width:250px}
+#tip b{font-size:14px}#tip span{color:var(--mid)}
 #legend{bottom:14px;left:14px;padding:11px 14px;font-size:11.5px;color:var(--mid)}
-#legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+#legend .hint{margin-top:7px;padding-top:7px;border-top:1px solid var(--hair);
+ font-size:11px;opacity:.85}
+#legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+.maplibregl-ctrl-group{background:var(--panel)!important;border:1px solid var(--hair)!important}
+.maplibregl-ctrl-icon{filter:invert(1) hue-rotate(180deg)}
+@media(max-width:640px){
+  #panel{width:auto;right:70px;padding:13px 14px}
+  h1{font-size:16px}.big{font-size:26px}.tag{display:none}
+  #legend{display:none}
+  #drawer{width:100%;padding:20px 18px 40px}
+}
 </style></head><body>
 <div id="map"></div>
 <div id="tip"></div>
 
 <div class="card" id="panel">
-  <h1>Карта повітряних загроз</h1>
-  <p class="s">Кожна крапка — населений пункт, який називали в повідомленнях про повітряну загрозу. Розмір і колір — кількість згадок. Наближайте, щоб дійти до сіл.</p>
-
-  <label class="f">Тип цілі
-    <select id="cls"><option value="-1">усі</option></select>
-  </label>
-
-  <label class="f">Період: <span id="mlabel"></span></label>
-  <input type="range" id="m0" min="0" value="0">
-  <input type="range" id="m1" min="0" value="0">
-
-  <div class="lay">
+  <h1>Під тривогою</h1>
+  <p class="tag">Населені пункти, які називали в повідомленнях про повітряну загрозу з 2022 року. Наближайте, щоб дійти до сіл.</p>
+  <div class="big" id="s-num">···</div>
+  <div id="s-sub">завантаження даних</div>
+  <label class="f" for="cls">Тип події</label>
+  <select id="cls"><option value="-1">усі</option></select>
+  <div class="rng">
+    <label class="f">Період: <span id="mlabel"></span></label>
+    <input type="range" id="m0" min="0" value="0" aria-label="початок періоду">
+    <input type="range" id="m1" min="0" value="0" aria-label="кінець періоду">
+  </div>
+  <div class="chk">
     <label><input type="checkbox" id="l-heat" checked> теплові плями</label>
     <label><input type="checkbox" id="l-pts" checked> населені пункти</label>
   </div>
-
-  <div id="stat">
-    <b id="s-name">Уся Україна</b>
-    <div class="n" id="s-num"></div>
-    <div class="s" id="s-sub" style="margin:2px 0 0"></div>
-  </div>
 </div>
 
+<button class="card" id="gear" aria-label="Статистика та розділи">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V10a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+</button>
+
+<aside id="drawer" aria-label="Додаткова статистика">
+  <button id="close" aria-label="Закрити">&times;</button>
+  <h2>Що показують дані</h2>
+  <p>Мапа побудована на повідомленнях каналів, які попереджають про повітряну загрозу. Кожна згадка населеного пункту — момент, коли над ним або в його бік летіла ціль.</p>
+  <h3>Області за кількістю згадок</h3>
+  <table class="rank"><tbody id="obl"></tbody></table>
+  <h3>Найбільше згадок</h3>
+  <table class="rank"><tbody id="topp"></tbody></table>
+  <h3>Найменше згадок</h3>
+  <table class="rank"><tbody id="botp"></tbody></table>
+  <div class="warn">
+    <b>Це не рейтинг безпеки.</b> Згадка про загрозу — не влучання. Більшість цілей збили або вони пройшли повз. Великі міста згадують частіше, бо вони служать орієнтирами для опису курсу. Прифронтові громади, навпаки, недорепортяться. Не ухвалюйте рішення про переїзд за цією мапою.
+  </div>
+  <h3>Інші розділи</h3>
+  <nav class="links">
+    <a href="./raiony.html">Скільки часу живе під тривогою ваша громада<span>Пошук серед 1431 громади та 118 районів</span></a>
+    <a href="./karta.html">Карта тривог по районах<span>Заливка за часом під тривогою</span></a>
+    <a href="./zbroya.html">Чим били по Україні<span>Динаміка типів озброєння по місяцях</span></a>
+    <a href="./oblasti.html">Уся війна, область за областю<span>2022–2026, години тривог</span></a>
+    <a href="./about.html">Про проєкт і джерела<span>Методика, застереження, відкриті дані</span></a>
+  </nav>
+</aside>
+
 <div class="card" id="legend">
-  <div><i style="background:#F0D48F"></i>рідко</div>
-  <div><i style="background:#D2762F"></i>часто</div>
-  <div><i style="background:#5A140E"></i>дуже часто</div>
-  <div style="margin-top:6px">Згадка ≠ влучання</div>
+  <div><i style="background:#F2D08A"></i>рідко</div>
+  <div><i style="background:#E4622C"></i>часто</div>
+  <div><i style="background:#8E1F16"></i>дуже часто</div>
+  <div class="hint">клік по крапці — наблизити</div>
 </div>
 
 <script>
-const {MapboxOverlay,ScatterplotLayer,HeatmapLayer}=deck;
+const {MapboxOverlay,ScatterplotLayer,HeatmapLayer,TextLayer}=deck;
 const $=i=>document.getElementById(i);
-let D=null, agg=null, maxC=1, overlay=null;
+let D=null, agg=null, maxC=1, overlay=null, zoom=5.4, mapRef=null;
 
-const RAMP=[[247,241,220],[240,212,143],[229,169,80],[210,118,47],[174,66,32],[90,20,14]];
-function color(t){
+const RAMP=[[250,238,200],[242,208,138],[233,160,74],[228,98,44],[178,44,26],[120,20,14]];
+function color(t,a){
   const x=Math.min(.999,Math.max(0,t))*(RAMP.length-1);
-  const i=Math.floor(x), f=x-i, a=RAMP[i], b=RAMP[Math.min(i+1,RAMP.length-1)];
-  return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f, 210];
+  const i=Math.floor(x), f=x-i, p=RAMP[i], q=RAMP[Math.min(i+1,5)];
+  return [p[0]+(q[0]-p[0])*f, p[1]+(q[1]-p[1])*f, p[2]+(q[2]-p[2])*f, a];
 }
 
 function recompute(){
@@ -162,91 +251,165 @@ function recompute(){
   let a=+$('m0').value, b=+$('m1').value;
   if(a>b){const t=a;a=b;b=t;}
   $('mlabel').textContent = D.months[a]===D.months[b]
-    ? D.months[a] : `${D.months[a]} — ${D.months[b]}`;
+    ? D.months[a] : D.months[a]+' — '+D.months[b];
   agg=new Float64Array(D.places.length);
-  const cells=D.cells;
-  for(let i=0;i<cells.length;i+=4){
-    const mi=cells[i+1];
+  const cl=D.cells;
+  for(let i=0;i<cl.length;i+=4){
+    const mi=cl[i+1];
     if(mi<a||mi>b) continue;
-    if(c>=0 && cells[i+2]!==c) continue;
-    agg[cells[i]]+=cells[i+3];
+    if(c>=0 && cl[i+2]!==c) continue;
+    agg[cl[i]]+=cl[i+3];
   }
   maxC=1; let tot=0, np=0;
-  for(let i=0;i<agg.length;i++){ const v=agg[i]; if(v>maxC)maxC=v; tot+=v; if(v)np++; }
-  $('s-name').textContent='Уся Україна';
+  for(let i=0;i<agg.length;i++){const v=agg[i]; if(v>maxC)maxC=v; tot+=v; if(v)np++;}
   $('s-num').textContent=tot.toLocaleString('uk');
-  $('s-sub').textContent=`згадок у ${np.toLocaleString('uk')} населених пунктах`;
+  $('s-sub').textContent='згадок у '+np.toLocaleString('uk')+' населених пунктах';
+  fillRanks();
   render();
 }
+
+function bars(el, rows, max){
+  $(el).innerHTML=rows.map(function(r){
+    return '<tr><td>'+r[0]+'</td><td class="bar"><div><i style="width:'
+      +(r[1]/max*100).toFixed(1)+'%"></i></div></td><td>'
+      +Math.round(r[1]).toLocaleString('uk')+'</td></tr>';
+  }).join('');
+}
+function fillRanks(){
+  bars('obl', D.oblasts.slice(0,12), D.oblasts[0][1]);
+  const idx=[];
+  for(let i=0;i<agg.length;i++) if(agg[i]>0) idx.push(i);
+  idx.sort(function(x,y){return agg[y]-agg[x];});
+  const nm=function(i){return D.places[i][0]
+    +' <span style="color:#93A0AA">· '+D.places[i][1]+'</span>';};
+  if(!idx.length) return;
+  bars('topp', idx.slice(0,10).map(function(i){return [nm(i),agg[i]];}), agg[idx[0]]);
+  const tail=idx.slice(-10).reverse();
+  bars('botp', tail.map(function(i){return [nm(i),agg[i]];}), agg[tail[0]]||1);
+}
+
+// Плавна передача естафети між шарами: далеко — плями, близько — крапки.
+// Коли обидва малювались на повну, виходили «бублики».
+function heatOp(z){ return z<6.5 ? .85 : z>9 ? 0 : .85*(9-z)/2.5; }
+function ptsOp(z){ return z<6.5 ? .35 : z>9 ? .92 : .35+.57*(z-6.5)/2.5; }
 
 function render(){
   if(!overlay||!agg) return;
   const idx=[];
   for(let i=0;i<agg.length;i++) if(agg[i]>0) idx.push(i);
-  const layers=[];
-  if($('l-heat').checked) layers.push(new HeatmapLayer({
+  const L=[];
+  if($('l-heat').checked && heatOp(zoom)>0.01) L.push(new HeatmapLayer({
     id:'heat', data:idx,
-    getPosition:i=>[D.places[i][3],D.places[i][4]],
-    getWeight:i=>agg[i],
-    radiusPixels:55, intensity:1.1, threshold:.05,
-    colorRange:RAMP.slice(1).map(c=>[c[0],c[1],c[2],185]),
+    getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
+    getWeight:function(i){return agg[i];},
+    radiusPixels:46, intensity:1.25, threshold:.06, opacity:heatOp(zoom),
+    colorRange:[[120,60,20,0],[190,110,40,150],[224,140,50,190],
+                [230,98,44,215],[186,46,26,235],[130,18,12,250]],
     updateTriggers:{getWeight:agg}
   }));
-  if($('l-pts').checked) layers.push(new ScatterplotLayer({
+  if($('l-pts').checked) L.push(new ScatterplotLayer({
     id:'pts', data:idx, pickable:true,
-    getPosition:i=>[D.places[i][3],D.places[i][4]],
-    getRadius:i=>Math.sqrt(agg[i]/maxC)*11000+900,
-    radiusMinPixels:2.5, radiusMaxPixels:36,
-    getFillColor:i=>color(Math.sqrt(agg[i]/maxC)),
-    stroked:true, lineWidthMinPixels:.6, getLineColor:[255,255,255,170],
-    onHover:info=>{
+    getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
+    getRadius:function(i){return Math.pow(agg[i]/maxC,.42)*8000+500;},
+    radiusMinPixels:1.8, radiusMaxPixels:30,
+    getFillColor:function(i){return color(Math.pow(agg[i]/maxC,.42), 235);},
+    opacity:ptsOp(zoom), stroked:false,
+    onHover:function(info){
       const t=$('tip');
-      if(!info||info.object===undefined||info.object===null){
-        t.style.display='none'; return;
-      }
-      const i=info.object, p=D.places[i], n=agg[i], jet=D.jets[i]||0;
+      if(!info||info.object===undefined||info.object===null){t.style.display='none';return;}
+      const i=info.object, p=D.places[i], n=agg[i], j=D.jets[i]||0;
       t.style.display='block';
-      t.style.left=(info.x+16)+'px'; t.style.top=(info.y+16)+'px';
-      t.innerHTML=`<b>${p[0]}</b><br><span>${p[2]?p[2]+' р-н, ':''}${p[1]}</span>`
-        +`<br>${Math.round(n).toLocaleString('uk')} згадок про загрозу`
-        +(jet/Math.max(n,1)>.05?`<br><span>реактивних: ${Math.round(jet/n*100)}%</span>`:'');
+      t.style.left=Math.min(info.x+16, innerWidth-262)+'px';
+      t.style.top=(info.y+16)+'px';
+      t.innerHTML='<b>'+p[0]+'</b><br><span>'+(p[2]?p[2]+' р-н, ':'')+p[1]+'</span>'
+        +'<br>'+Math.round(n).toLocaleString('uk')+' згадок про загрозу'
+        +(j/Math.max(n,1)>.05?'<br><span>реактивних: '+Math.round(j/n*100)+'%</span>':'');
+    },
+    onClick:function(info){
+      if(!info||info.object===undefined||!mapRef) return;
+      const p=D.places[info.object];
+      mapRef.flyTo({center:[p[3],p[4]], zoom:Math.max(mapRef.getZoom(),10.5),
+                    duration:900});
     },
     updateTriggers:{getRadius:[maxC,agg],getFillColor:[maxC,agg]}
   }));
-  overlay.setProps({layers});
+  // Підписи з'являються тільки зблизька — інакше карта перетворюється на кашу.
+  if(zoom>=8.6 && $('l-pts').checked){
+    const lab=idx.slice().sort(function(a,b){return agg[b]-agg[a];}).slice(0,220);
+    L.push(new TextLayer({
+      id:'lbl', data:lab,
+      getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
+      getText:function(i){return D.places[i][0];},
+      getSize:function(i){return agg[i]>maxC*.25?13:11.5;},
+      getColor:[237,241,244,235],
+      getPixelOffset:[0,-14],
+      fontFamily:'Inter, system-ui, sans-serif', fontWeight:600,
+      outlineWidth:3, outlineColor:[9,12,15,235], fontSettings:{sdf:true},
+      getTextAnchor:'middle', getAlignmentBaseline:'bottom',
+      characterSet:'auto',
+      updateTriggers:{getSize:[maxC,agg],getText:agg}
+    }));
+  }
+  overlay.setProps({layers:L});
 }
 
-fetch('events.json').then(r=>r.json()).then(j=>{
+$('gear').onclick=function(){$('drawer').classList.add('on');};
+$('close').onclick=function(){$('drawer').classList.remove('on');};
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')$('drawer').classList.remove('on');});
+
+fetch('events.json').then(function(r){return r.json();}).then(function(j){
   D=j;
-  D.classes.forEach((c,i)=>$('cls').insertAdjacentHTML('beforeend',
-    `<option value="${i}">${c}</option>`));
+  D.classes.forEach(function(c,i){$('cls').insertAdjacentHTML('beforeend',
+    '<option value="'+i+'">'+c+'</option>');});
   const last=D.months.length-1;
-  $('m0').max=last; $('m1').max=last;
-  $('m0').value=0;  $('m1').value=last;
+  $('m0').max=last; $('m1').max=last; $('m0').value=0; $('m1').value=last;
 
   const map=new maplibregl.Map({
     container:'map',
-    style:'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-    center:[31.5,48.9], zoom:5.4, minZoom:4.5, maxZoom:14,
-    scrollZoom:true, dragRotate:false
+    style:'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    center:[31.3,48.8], zoom:5.4, minZoom:4.5, maxZoom:14,
+    dragRotate:false
   });
-  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
-  map.addControl(new maplibregl.ScaleControl({unit:'metric'}),'bottom-right');
-
-  // MapboxOverlay — штатний спосіб посадити deck.gl на MapLibre.
-  // Камерою керує сама карта, колесо миші й перетягування працюють як завжди.
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right');
   overlay=new MapboxOverlay({interleaved:false, layers:[]});
   map.addControl(overlay);
-
-  map.on('load',()=>{ recompute(); });
-  ['cls','m0','m1'].forEach(i=>$(i).oninput=recompute);
-  ['l-heat','l-pts'].forEach(i=>$(i).onchange=render);
-}).catch(e=>{
-  document.getElementById('s-name').textContent='Не вдалося завантажити дані';
+  mapRef=map;
+  let pending=false, lastBand=-1;
+  function band(z){ return z<6.5?0 : z>9?2 : 1; }
+  map.on('zoom',function(){
+    zoom=map.getZoom();
+    const b=band(zoom);
+    // у крайніх смугах прозорість стала — перемальовувати нема сенсу
+    if(b===lastBand && b!==1) return;
+    lastBand=b;
+    if(pending) return;
+    pending=true;
+    requestAnimationFrame(function(){pending=false; render();});
+  });
+  map.on('load',recompute);
+  ['cls','m0','m1'].forEach(function(i){$(i).oninput=recompute;});
+  ['l-heat','l-pts'].forEach(function(i){$(i).onchange=render;});
+}).catch(function(e){
+  $('s-num').textContent='—';
+  $('s-sub').textContent='не вдалося завантажити дані';
   console.error(e);
 });
 </script></body></html>"""
 
-open('mapa.html', 'w', encoding='utf-8').write(HTML)
-print(f"Готово: mapa.html ({os.path.getsize('mapa.html')//1024} KB)")
+HTML = HTML.replace('__DESC__', DESC).replace('__SITE__', SITE)
+open('index.html', 'w', encoding='utf-8').write(HTML)
+print(f"Готово: index.html ({os.path.getsize('index.html') // 1024} KB)")
+
+open('robots.txt', 'w').write(
+    f"User-agent: *\nAllow: /\n\nSitemap: {SITE}/sitemap.xml\n")
+pages = ['', 'raiony.html', 'karta.html', 'zbroya.html', 'oblasti.html', 'about.html']
+sm = ['<?xml version="1.0" encoding="UTF-8"?>',
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+for p in pages:
+    sm.append(f"<url><loc>{SITE}/{p}</loc><changefreq>monthly</changefreq>"
+              f"<priority>{'1.0' if p == '' else '0.7'}</priority></url>")
+sm.append('</urlset>')
+open('sitemap.xml', 'w').write('\n'.join(sm))
+print("Готово: robots.txt, sitemap.xml")
 con.close()

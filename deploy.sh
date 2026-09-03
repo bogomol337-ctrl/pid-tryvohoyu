@@ -10,6 +10,7 @@
 #   tryvoha-threats.html  карта маршрутів дронів
 #   ukraine-alert-map.html  карта областей за всю війну
 #   zbroya.html           динаміка типів озброєння
+#   mapa.html             попередня, світла версія карти (лишається як /mapa)
 #   data/                 відкриті CSV (необов'язково)
 
 set -e
@@ -29,6 +30,9 @@ copy () {   # copy <звідки> <куди>
 }
 
 copy index.html             index.html
+copy about.html             about.html
+copy robots.txt             robots.txt
+copy sitemap.xml            sitemap.xml
 copy pid-tryvohoyu.html     raiony.html
 copy tryvoha-threats.html   drony.html
 copy ukraine-alert-map.html oblasti.html

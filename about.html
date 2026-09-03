@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Під тривогою — відкриті дані про повітряну загрозу в Україні</title>
+<meta name="description" content="Скільки часу кожен район України прожив під повітряною тривогою з 2022 року. Відкриті дані, три інтерактивні карти.">
+<meta property="og:title" content="Під тривогою">
+<meta property="og:description" content="Скільки часу ваша громада живе під повітряною тривогою. Відкриті дані з 2022 року.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#E6EAEC;--panel:#F4F6F7;--ink:#15181B;--mid:#5B646A;--hair:#C3CBD0;--hot:#AE4220}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;
+ font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1000px;margin:0 auto;padding:56px 22px 80px}
+
+h1{font-size:clamp(34px,6vw,62px);font-weight:700;letter-spacing:-.035em;line-height:1;margin:0 0 18px;max-width:15ch}
+.lede{max-width:56ch;font-size:17px;line-height:1.6;color:var(--mid);margin:0 0 44px}
+.lede b{color:var(--ink);font-weight:500}
+
+.figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:26px;
+ border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);padding:26px 0;margin-bottom:52px}
+.figures div b{display:block;font-size:clamp(28px,4vw,38px);font-weight:700;letter-spacing:-.03em;line-height:1}
+.figures div span{display:block;font-size:13px;color:var(--mid);margin-top:7px;max-width:22ch}
+
+h2{font-size:13px;font-weight:500;color:var(--mid);margin:0 0 18px}
+.cards{display:grid;gap:2px;margin-bottom:56px}
+a.card{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:baseline;
+ padding:22px 0;border-bottom:1px solid var(--hair);text-decoration:none;color:inherit}
+a.card:first-child{border-top:1px solid var(--hair)}
+a.card:hover strong{color:var(--hot)}
+a.card strong{display:block;font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:5px}
+a.card em{font-style:normal;font-size:14px;color:var(--mid);display:block;max-width:52ch}
+a.card .go{font-size:14px;color:var(--mid);white-space:nowrap}
+a.card:hover .go{color:var(--hot)}
+
+.method{border-top:1px solid var(--hair);padding-top:26px;max-width:66ch;font-size:14px;color:var(--mid)}
+.method h3{font-size:15px;font-weight:600;color:var(--ink);margin:0 0 10px}
+.method p{margin:0 0 14px}
+.method b{color:var(--ink);font-weight:500}
+.method a{color:var(--ink)}
+footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--hair);font-size:13px;color:var(--mid)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Під тривогою</h1>
+  <p class="lede">Відкриті дані про те, скільки часу Україна прожила під повітряною загрозою. Зібрано з офіційних сповіщень про тривогу та повідомлень Повітряних Сил ЗСУ, <b>з березня 2022 по серпень 2026</b>.</p>
+
+  <div class="figures">
+    <div><b>297 288</b><span>сповіщень про тривогу</span></div>
+    <div><b>96,8%</b><span>часу під тривогою прожив Нікопольський район</span></div>
+    <div><b>1 281</b><span>населений пункт на маршрутах ударних дронів</span></div>
+    <div><b>6 308</b><span>оголошень ракетної небезпеки</span></div>
+  </div>
+
+  <h2>Шість розділів</h2>
+  <div class="cards">
+    <a class="card" href="./mapa.html">
+      <span><strong>Головна карта загроз</strong>
+      <em>Усі згадки населених пунктів у повідомленнях про повітряну загрозу. Теплові плями, фільтр за типом цілі, повзунок періоду. Наближайте до окремого села.</em></span>
+      <span class="go">Відкрити</span>
+    </a>
+    <a class="card" href="./karta.html">
+      <span><strong>Карта тривог по районах</strong>
+      <em>Уся країна на одній карті: заливка районів за часом під тривогою, крапки населених пунктів на маршрутах дронів. Наближайте до окремого міста.</em></span>
+      <span class="go">Відкрити</span>
+    </a>
+    <a class="card" href="./raiony.html">
+      <span><strong>Скільки часу живе під тривогою ваша громада</strong>
+      <em>Введіть назву громади або району — побачите свою частку часу під тривогою, місце серед 118 районів і як це виглядає поруч із рештою країни.</em></span>
+      <span class="go">Відкрити</span>
+    </a>
+    <a class="card" href="./drony.html">
+      <span><strong>Куди летіли ударні дрони</strong>
+      <em>Понад тисяча населених пунктів, які Повітряні Сили називали в оперативних попередженнях. Окремо — ракетна небезпека по областях.</em></span>
+      <span class="go">Відкрити</span>
+    </a>
+    <a class="card" href="./zbroya.html">
+      <span><strong>Чим били по Україні</strong>
+      <em>Динаміка засобів повітряного нападу по місяцях: ударні БпЛА, балістика, крилаті ракети, кількість локацій влучань.</em></span>
+      <span class="go">Відкрити</span>
+    </a>
+    <a class="card" href="./oblasti.html">
+      <span><strong>Уся війна, область за областю</strong>
+      <em>Динаміка з 2022 по 2026 рік: години тривог, кількість, людино-години. Видно, як змінювалася географія загрози.</em></span>
+      <span class="go">Відкрити</span>
+    </a>
+  </div>
+
+  <div class="method">
+    <h3>Що ці дані означають, а що ні</h3>
+    <p><b>Тривога — це не влучання.</b> Дані показують, де оголошували загрозу, а не куди падало. У прифронтових районах тривогу вмикають на підлітний час у кілька хвилин, а в тилу — на весь маршрут ракети через півкраїни. Це різні речі.</p>
+    <p><b>Великі міста завищені.</b> Їх називають частіше не тому, що там небезпечніше, а тому, що вони служать орієнтирами для опису курсу цілі. Село поруч із Харковом окремо не назвуть.</p>
+    <p><b>Минуле не передбачає майбутнє.</b> За час війни дальність ударних засобів зростала, і райони, тихі у 2022-му, такими не залишились. Не ухвалюйте рішення про переїзд лише за цими картами.</p>
+    <p><b>Повнота джерела змінювалася.</b> У 2022 році Повітряні Сили публікували вчетверо менше повідомлень, ніж зараз. Порожня карта за ранній період означає брак даних, а не спокій.</p>
+    <h3>Джерела</h3>
+    <p>Сповіщення про тривоги — датасет <a href="https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset">Vadimkin</a> на основі офіційного каналу «Повітряна тривога». Оперативні попередження — канал Повітряних Сил ЗСУ. Довідник населених пунктів — <a href="https://github.com/kse-ua/KSE-Loc-Data-Hub">KSE Loc Data Hub</a>. Межі районів — <a href="https://github.com/slawomirmatuszak/ukrainian_geodata">ukrainian_geodata</a>.</p>
+  </div>
+
+  <div class="method" style="border-top:1px solid var(--hair);margin-top:26px;padding-top:26px">
+    <h3>Відкриті дані</h3>
+    <p>Усі агрегати доступні у CSV під ліцензією CC BY 4.0 — беріть і користуйтеся. Сирі тексти повідомлень не публікуються: це чужий контент, а користь дають саме агрегати. <a href="./data/README.md">Опис файлів і методика</a>.</p>
+  </div>
+  <footer>Некомерційний проєкт. Дані відкриті, користуйтеся вільно.</footer>
+</div>
+</body>
+</html>
