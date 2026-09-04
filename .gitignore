@@ -26,3 +26,7 @@ settlements.json
 run.sh
 !raiony_alerts.geojson
 runbot.sh
+bot.db
+official_alerts.csv
+official_data_uk.csv
+docker-compose.yml
