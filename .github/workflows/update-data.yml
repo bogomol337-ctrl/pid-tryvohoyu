@@ -73,8 +73,18 @@ jobs:
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
         run: python update.py
 
+      # Датасет тривог оновлюється в автора щодня — тягнемо свіжий щоразу,
+      # інакше історія тривог назавжди лишиться станом на день першої збірки.
+      - name: Оновити датасет тривог
+        run: |
+          curl -sSL --retry 3 -o official_data_uk.csv \
+            "https://raw.githubusercontent.com/Vadimkin/ukrainian-air-raid-sirens-dataset/main/datasets/official_data_uk.csv"
+          echo "рядків у датасеті: $(wc -l < official_data_uk.csv)"
+          mkdir -p data && cp official_data_uk.csv data/official_data_uk.csv
+
       - name: Перебудувати дані
         run: |
+          python build_alerts.py
           python parse_kpszsu.py
           python geocode_threats.py
           python extract_all.py
@@ -100,6 +110,7 @@ jobs:
             "ukraine-alert-map.html:oblasti.html" \
             "zbroya.html:zbroya.html" \
             "karta.html:karta.html" \
+            "live.html:live.html" \
             "mapa.html:mapa.html" \
             "events.json:events.json" \
             "settlements.json:settlements.json" \
@@ -134,3 +145,37 @@ jobs:
         with:
           path: messages.db
           key: tryvoha-db-${{ github.run_id }}
+
+      # Кеш Actions видаляється через 7 днів без звернень, а розклад місячний —
+      # тобто до наступного запуску кеша гарантовано не буде. Тому свіжу базу
+      # щоразу кладемо в реліз: саме звідти її візьме наступний прогон.
+      - name: Оновити знімок бази в релізі
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gzip -kf messages.db
+          ls -lh messages.db.gz
+          gh release upload seed messages.db.gz --clobber
+          gh release edit seed --notes "Знімок бази станом на $(date -u +%F). Оновлюється автоматично."
+          echo "Знімок оновлено — наступний запуск стартує з цієї бази"
+
+      - name: Підсумок
+        if: always()
+        run: |
+          echo "### Оновлення даних $(date -u +%F)" >> $GITHUB_STEP_SUMMARY
+          if [ -f messages.db ]; then
+            python - <<'PY' >> $GITHUB_STEP_SUMMARY
+          import sqlite3
+          c = sqlite3.connect('messages.db')
+          n = c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+          last = c.execute("SELECT MAX(ts) FROM messages").fetchone()[0]
+          try:
+              e = c.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+          except Exception:
+              e = 0
+          print(f"- Повідомлень у базі: {n:,}".replace(',', ' '))
+          print(f"- Останнє повідомлення: {last}")
+          print(f"- Подій витягнуто: {e:,}".replace(',', ' '))
+          PY
+          fi

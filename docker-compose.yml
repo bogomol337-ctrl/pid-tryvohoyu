@@ -1,0 +1,111 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tryvoha}
+      POSTGRES_USER: ${POSTGRES_USER:-tryvoha}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tryvoha_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - tryvoha_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tryvoha} -d ${POSTGRES_DB:-tryvoha}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://tryvoha:tryvoha_dev_password@db:5432/tryvoha}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+      - ./scripts:/scripts:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 35s
+
+  frontend:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 10s
+
+  live-poller:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://tryvoha:tryvoha_dev_password@db:5432/tryvoha}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "/scripts/poll_live_alerts.py", "--loop", "--interval", "90"]
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts:ro
+
+  telegram-reader:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://tryvoha:tryvoha_dev_password@db:5432/tryvoha}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "/scripts/telegram_client_reader.py"]
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts:ro
+      - ./runtime:/runtime
+
+  telegram-bot-poller:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://tryvoha:tryvoha_dev_password@db:5432/tryvoha}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "/scripts/telegram_bot_poller.py"]
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts:ro
+
+volumes:
+  tryvoha_pgdata:

@@ -132,6 +132,14 @@ input[type=range]{width:100%;accent-color:var(--hot);margin:3px 0}
 .chk{margin-top:13px;display:flex;flex-direction:column;gap:6px}
 .chk label{font-size:12.5px;display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--mid)}
 .chk input{accent-color:var(--hot);width:auto;margin:0}
+.acts{margin-top:15px;padding-top:14px;border-top:1px solid var(--hair);
+ display:flex;flex-direction:column;gap:7px}
+.act{display:block;padding:9px 12px;border-radius:6px;text-decoration:none;
+ font-size:13px;font-weight:500;text-align:center;
+ border:1px solid var(--hair);color:var(--ink)}
+.act:hover{border-color:var(--hot);color:var(--hot)}
+.act.hot{background:var(--hot);border-color:var(--hot);color:#fff;font-weight:600}
+.act.hot:hover{background:#F0743C;color:#fff}
 #gear{top:14px;right:14px;width:42px;height:42px;display:flex;align-items:center;
  justify-content:center;cursor:pointer;padding:0}
 #gear:hover{border-color:var(--hot)}
@@ -198,6 +206,10 @@ input[type=range]{width:100%;accent-color:var(--hot);margin:3px 0}
     <label><input type="checkbox" id="l-heat" checked> теплові плями</label>
     <label><input type="checkbox" id="l-pts" checked> населені пункти</label>
   </div>
+  <div class="acts">
+    <a class="act hot" href="./live.html">🔴 Що зараз летить</a>
+    <a class="act" href="https://t.me/pidtryvohoyu_bot" target="_blank" rel="noopener">Сповіщення в Telegram</a>
+  </div>
 </div>
 
 <button class="card" id="gear" aria-label="Статистика та розділи">
@@ -219,6 +231,8 @@ input[type=range]{width:100%;accent-color:var(--hot);margin:3px 0}
   </div>
   <h3>Інші розділи</h3>
   <nav class="links">
+    <a href="./live.html">Що зараз летить<span>Тривоги та цілі в реальному часі</span></a>
+    <a href="https://t.me/pidtryvohoyu_bot" target="_blank" rel="noopener">Бот у Telegram<span>Сповіщення про ваше місто: що саме летить і звідки</span></a>
     <a href="./raiony.html">Скільки часу живе під тривогою ваша громада<span>Пошук серед 1431 громади та 118 районів</span></a>
     <a href="./karta.html">Карта тривог по районах<span>Заливка за часом під тривогою</span></a>
     <a href="./zbroya.html">Чим били по Україні<span>Динаміка типів озброєння по місяцях</span></a>
@@ -264,6 +278,9 @@ function recompute(){
   for(let i=0;i<agg.length;i++){const v=agg[i]; if(v>maxC)maxC=v; tot+=v; if(v)np++;}
   $('s-num').textContent=tot.toLocaleString('uk');
   $('s-sub').textContent='згадок у '+np.toLocaleString('uk')+' населених пунктах';
+  styleKey++;
+  if(!POS) buildBuffers();
+  buildStyle();
   fillRanks();
   render();
 }
@@ -293,31 +310,56 @@ function fillRanks(){
 function heatOp(z){ return z<6.5 ? .85 : z>9 ? 0 : .85*(9-z)/2.5; }
 function ptsOp(z){ return z<6.5 ? .35 : z>9 ? .92 : .35+.57*(z-6.5)/2.5; }
 
+// Позиції не змінюються ніколи — рахуємо один раз.
+let POS=null, RAD=null, COL=null, IDX=null;
+function buildBuffers(){
+  const n=D.places.length;
+  POS=new Float32Array(n*2);
+  for(let i=0;i<n;i++){POS[i*2]=D.places[i][3]; POS[i*2+1]=D.places[i][4];}
+}
+// Радіуси й кольори перераховуємо лише коли змінились дані, не при зумі.
+function buildStyle(){
+  const n=D.places.length;
+  RAD=new Float32Array(n); COL=new Uint8Array(n*4); IDX=[];
+  for(let i=0;i<n;i++){
+    const v=agg[i];
+    if(v>0) IDX.push(i);
+    const t=v>0?Math.pow(v/maxC,.42):0;
+    RAD[i]=v>0?t*8000+500:0;
+    const c=color(t,235);
+    COL[i*4]=c[0]; COL[i*4+1]=c[1]; COL[i*4+2]=c[2]; COL[i*4+3]=v>0?235:0;
+  }
+}
+
+let heatOn=true, styleKey=0;
 function render(){
   if(!overlay||!agg) return;
-  const idx=[];
-  for(let i=0;i<agg.length;i++) if(agg[i]>0) idx.push(i);
+  if(!POS) buildBuffers();
   const L=[];
-  if($('l-heat').checked && heatOp(zoom)>0.01) L.push(new HeatmapLayer({
-    id:'heat', data:idx,
-    getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
+  const showHeat=$('l-heat').checked && zoom<9;
+  if(showHeat) L.push(new HeatmapLayer({
+    id:'heat', data:IDX,
+    getPosition:function(i){return [POS[i*2],POS[i*2+1]];},
     getWeight:function(i){return agg[i];},
-    radiusPixels:46, intensity:1.25, threshold:.06, opacity:heatOp(zoom),
+    radiusPixels:46, intensity:1.25, threshold:.06, opacity:.8,
     colorRange:[[120,60,20,0],[190,110,40,150],[224,140,50,190],
                 [230,98,44,215],[186,46,26,235],[130,18,12,250]],
-    updateTriggers:{getWeight:agg}
+    updateTriggers:{getWeight:styleKey}
   }));
   if($('l-pts').checked) L.push(new ScatterplotLayer({
-    id:'pts', data:idx, pickable:true,
-    getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
-    getRadius:function(i){return Math.pow(agg[i]/maxC,.42)*8000+500;},
+    id:'pts', data:{length:D.places.length,
+      attributes:{
+        getPosition:{value:POS,size:2},
+        getRadius:{value:RAD,size:1},
+        getFillColor:{value:COL,size:4,normalized:true}
+      }},
+    pickable:true, stroked:false,
     radiusMinPixels:1.8, radiusMaxPixels:30,
-    getFillColor:function(i){return color(Math.pow(agg[i]/maxC,.42), 235);},
-    opacity:ptsOp(zoom), stroked:false,
+    opacity:zoom<6.5?.4:.92,
     onHover:function(info){
       const t=$('tip');
-      if(!info||info.object===undefined||info.object===null){t.style.display='none';return;}
-      const i=info.object, p=D.places[i], n=agg[i], j=D.jets[i]||0;
+      if(!info||info.index<0||!agg[info.index]){t.style.display='none';return;}
+      const i=info.index, p=D.places[i], n=agg[i], j=D.jets[i]||0;
       t.style.display='block';
       t.style.left=Math.min(info.x+16, innerWidth-262)+'px';
       t.style.top=(info.y+16)+'px';
@@ -326,28 +368,25 @@ function render(){
         +(j/Math.max(n,1)>.05?'<br><span>реактивних: '+Math.round(j/n*100)+'%</span>':'');
     },
     onClick:function(info){
-      if(!info||info.object===undefined||!mapRef) return;
-      const p=D.places[info.object];
-      mapRef.flyTo({center:[p[3],p[4]], zoom:Math.max(mapRef.getZoom(),10.5),
-                    duration:900});
+      if(!info||info.index<0||!agg[info.index]||!mapRef) return;
+      const p=D.places[info.index];
+      mapRef.flyTo({center:[p[3],p[4]],
+                    zoom:Math.max(mapRef.getZoom(),10.5), duration:900});
     },
-    updateTriggers:{getRadius:[maxC,agg],getFillColor:[maxC,agg]}
+    updateTriggers:{all:styleKey}
   }));
-  // Підписи з'являються тільки зблизька — інакше карта перетворюється на кашу.
-  if(zoom>=8.6 && $('l-pts').checked){
-    const lab=idx.slice().sort(function(a,b){return agg[b]-agg[a];}).slice(0,220);
+  if(zoom>=8.6 && $('l-pts').checked && IDX.length){
+    const lab=IDX.slice().sort(function(a,b){return agg[b]-agg[a];}).slice(0,200);
     L.push(new TextLayer({
       id:'lbl', data:lab,
-      getPosition:function(i){return [D.places[i][3],D.places[i][4]];},
+      getPosition:function(i){return [POS[i*2],POS[i*2+1]];},
       getText:function(i){return D.places[i][0];},
       getSize:function(i){return agg[i]>maxC*.25?13:11.5;},
-      getColor:[237,241,244,235],
-      getPixelOffset:[0,-14],
+      getColor:[237,241,244,235], getPixelOffset:[0,-14],
       fontFamily:'Inter, system-ui, sans-serif', fontWeight:600,
       outlineWidth:3, outlineColor:[9,12,15,235], fontSettings:{sdf:true},
-      getTextAnchor:'middle', getAlignmentBaseline:'bottom',
-      characterSet:'auto',
-      updateTriggers:{getSize:[maxC,agg],getText:agg}
+      getTextAnchor:'middle', getAlignmentBaseline:'bottom', characterSet:'auto',
+      updateTriggers:{getSize:styleKey,getText:styleKey}
     }));
   }
   overlay.setProps({layers:L});
@@ -375,17 +414,16 @@ fetch('events.json').then(function(r){return r.json();}).then(function(j){
   overlay=new MapboxOverlay({interleaved:false, layers:[]});
   map.addControl(overlay);
   mapRef=map;
-  let pending=false, lastBand=-1;
-  function band(z){ return z<6.5?0 : z>9?2 : 1; }
-  map.on('zoom',function(){
+  // Шари перебудовуються лише коли зум перетнув один із трьох порогів,
+  // а не на кожному кадрі. Між порогами deck.gl малює те, що вже завантажив.
+  function band(z){ return (z<6.5?0:1) + (z<9?0:1) + (z<8.6?0:1); }
+  let lastBand=band(5.4);
+  map.on('zoomend',function(){
     zoom=map.getZoom();
     const b=band(zoom);
-    // у крайніх смугах прозорість стала — перемальовувати нема сенсу
-    if(b===lastBand && b!==1) return;
+    if(b===lastBand) return;
     lastBand=b;
-    if(pending) return;
-    pending=true;
-    requestAnimationFrame(function(){pending=false; render();});
+    render();
   });
   map.on('load',recompute);
   ['cls','m0','m1'].forEach(function(i){$(i).oninput=recompute;});
@@ -403,7 +441,8 @@ print(f"Готово: index.html ({os.path.getsize('index.html') // 1024} KB)")
 
 open('robots.txt', 'w').write(
     f"User-agent: *\nAllow: /\n\nSitemap: {SITE}/sitemap.xml\n")
-pages = ['', 'raiony.html', 'karta.html', 'zbroya.html', 'oblasti.html', 'about.html']
+pages = ['', 'live.html', 'raiony.html', 'karta.html', 'zbroya.html',
+         'oblasti.html', 'about.html']
 sm = ['<?xml version="1.0" encoding="UTF-8"?>',
       '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
 for p in pages:

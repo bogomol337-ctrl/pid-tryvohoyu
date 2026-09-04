@@ -38,6 +38,7 @@ copy tryvoha-threats.html   drony.html
 copy ukraine-alert-map.html oblasti.html
 copy zbroya.html            zbroya.html
 copy karta.html             karta.html
+copy live.html              live.html
 copy mapa.html              mapa.html
 copy events.json            events.json
 copy settlements.json       settlements.json

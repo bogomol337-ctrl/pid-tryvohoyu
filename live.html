@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5">
+<title>Що зараз летить — карта повітряних загроз наживо</title>
+<meta name="description" content="Повітряні тривоги та цілі в реальному часі: тип, кількість, напрямок. Карта по всій Україні або по вашій області.">
+<link rel="canonical" href="https://pid-tryvohoyu.netlify.app/live.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Що зараз летить — карта повітряних загроз наживо">
+<meta property="og:description" content="Тривоги та цілі в реальному часі по всій Україні.">
+<meta name="theme-color" content="#12161A">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@9.0.35/dist.min.js"></script>
+<style>
+:root{--bg:#12161A;--panel:rgba(23,28,34,.94);--ink:#EDF1F4;--mid:#93A0AA;
+ --hair:#2E3841;--hot:#E4622C;--alarm:#C4341C;--ok:#3E8E5A}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}
+body{font-family:Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;
+ color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
+#map{position:absolute;inset:0}
+.card{position:absolute;z-index:5;background:var(--panel);backdrop-filter:blur(14px);
+ border:1px solid var(--hair);border-radius:8px}
+
+#top{top:14px;left:14px;padding:15px 17px;width:290px}
+h1{font-size:17px;font-weight:700;letter-spacing:-.02em;margin:0 0 3px}
+.sub{font-size:11.5px;color:var(--mid);margin:0 0 13px;line-height:1.45}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:11px;
+ color:var(--mid);text-transform:uppercase;letter-spacing:.07em;margin-bottom:11px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);
+ animation:pulse 2s infinite}
+.dot.off{background:var(--alarm);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.nums{display:flex;gap:18px;margin-bottom:13px}
+.nums b{display:block;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.nums span{font-size:11px;color:var(--mid)}
+select{width:100%;font:inherit;font-size:13px;padding:8px 9px;background:#1D242B;
+ border:1px solid var(--hair);border-radius:5px;color:var(--ink);cursor:pointer}
+select:focus{outline:2px solid var(--hot);outline-offset:1px}
+
+#feed{right:14px;top:14px;bottom:14px;width:330px;display:flex;flex-direction:column;
+ overflow:hidden}
+#feed header{padding:14px 16px 11px;border-bottom:1px solid var(--hair)}
+#feed header b{font-size:14px;font-weight:600}
+#feed header span{font-size:11.5px;color:var(--mid);display:block;margin-top:2px}
+#list{flex:1;overflow-y:auto;padding:6px 0}
+#list::-webkit-scrollbar{width:6px}
+#list::-webkit-scrollbar-thumb{background:var(--hair);border-radius:3px}
+.row{padding:11px 16px;border-bottom:1px solid rgba(46,56,65,.5);cursor:pointer;
+ display:flex;gap:11px;align-items:flex-start}
+.row:hover{background:rgba(228,98,44,.09)}
+.ic{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;
+ justify-content:center;font-size:13px;flex:0 0 auto;background:#242C34}
+.row b{font-size:13.5px;font-weight:600;display:block}
+.row .m{font-size:11.5px;color:var(--mid);margin-top:2px;line-height:1.4}
+.row .src{font-size:10.5px;color:var(--mid);margin-top:3px}
+.badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;
+ background:#2A333B;margin-left:5px}
+.badge.hi{background:#7A2A18;color:#FFD9CB}
+.empty{padding:30px 18px;text-align:center;color:var(--mid);font-size:13px;line-height:1.6}
+#feed footer{padding:11px 16px;border-top:1px solid var(--hair);font-size:11px;
+ color:var(--mid);line-height:1.5}
+#feed footer a{color:var(--ink)}
+
+#bot{bottom:14px;left:14px;padding:13px 16px;max-width:290px}
+#bot b{font-size:13.5px;display:block;margin-bottom:3px}
+#bot p{font-size:11.5px;color:var(--mid);margin:0 0 10px;line-height:1.45}
+.btn{display:inline-block;padding:8px 14px;background:var(--hot);color:#fff;
+ border-radius:6px;text-decoration:none;font-size:13px;font-weight:600}
+.btn:hover{background:#F0743C}
+.btn.ghost{background:transparent;border:1px solid var(--hair);color:var(--ink);
+ font-weight:500;margin-left:6px}
+
+#tip{position:absolute;z-index:9;pointer-events:none;display:none;
+ background:rgba(9,12,15,.96);border:1px solid var(--hair);padding:9px 12px;
+ border-radius:6px;font-size:12.5px;line-height:1.45;max-width:240px}
+#tip b{font-size:13.5px}#tip span{color:var(--mid)}
+.maplibregl-ctrl-group{background:var(--panel)!important;border:1px solid var(--hair)!important}
+.maplibregl-ctrl-icon{filter:invert(1) hue-rotate(180deg)}
+@media(max-width:880px){
+  #feed{left:14px;right:14px;top:auto;bottom:14px;width:auto;height:44%}
+  #top{right:14px;width:auto}
+  #bot{display:none}
+}
+</style></head><body>
+<div id="map"></div>
+<div id="tip"></div>
+
+<div class="card" id="top">
+  <h1>Що зараз летить</h1>
+  <p class="sub">Повітряні тривоги та цілі в реальному часі</p>
+  <div class="live"><span class="dot" id="dot"></span><span id="livetxt">підключення…</span></div>
+  <div class="nums">
+    <div><b id="n-alerts">—</b><span>районів під тривогою</span></div>
+    <div><b id="n-threats">—</b><span>цілей у повітрі</span></div>
+  </div>
+  <select id="obl"><option value="">Уся Україна</option></select>
+</div>
+
+<div class="card" id="feed">
+  <header><b>Стрічка</b><span id="feedsub">усі області</span></header>
+  <div id="list"><div class="empty">Завантаження…</div></div>
+  <footer>
+    Дані: <a href="https://neptun.in.ua" target="_blank" rel="noopener">NEPTUN</a> ·
+    Історія: <a href="./">Під тривогою</a><br>
+    Не заміна офіційній системі оповіщення.
+  </footer>
+</div>
+
+<div class="card" id="bot">
+  <b>Сповіщення у Telegram</b>
+  <p>Оберіть своє місто — і отримуйте не просто «тривога», а що саме летить у ваш бік.</p>
+  <a class="btn" href="https://t.me/pidtryvohoyu_bot" target="_blank" rel="noopener">Відкрити бот</a>
+  <a class="btn ghost" href="./">Історія</a>
+</div>
+
+<script>
+const {MapboxOverlay,ScatterplotLayer,GeoJsonLayer,LineLayer,TextLayer}=deck;
+const $=i=>document.getElementById(i);
+const API='https://neptun.in.ua';
+
+const TYPE={uav:['🛵','БпЛА'],shahed:['🛵','Шахед'],fpv:['🎯','FPV-дрон'],
+  recon:['👁','Розвідувальний БпЛА'],kab:['💣','КАБ'],
+  ballistic:['🚀','Балістика'],cruise:['🚀','Крилата ракета'],
+  missile:['🚀','Ракета'],mig31k:['✈️','МіГ-31К'],aviation:['✈️','Тактична авіація']};
+const DIRS=['півночі','північного сходу','сходу','південного сходу',
+            'півдня','південного заходу','заходу','північного заходу'];
+
+let threats=[], alerts={raions:[],oblasts:[]}, raionGeo=null;
+let overlay=null, mapRef=null, filterObl='';
+
+// Назви районів приходять по-різному: «Харківський район» проти «Харківський».
+// Порівнюємо нормалізовані ключі, а не сирі рядки.
+const nr = s => (s||'').toLowerCase().replace(/[’ʼ`]/g,"'")
+  .replace(/\s+(район|р-н)$/,'').trim();
+const no = s => (s||'').toLowerCase().replace(/[’ʼ`]/g,"'")
+  .replace(/\s+область$/,'').trim();
+
+function dirFrom(h){
+  if(h===null||h===undefined) return '';
+  return ' з ' + DIRS[Math.floor(((h+180)%360)/45)%8];
+}
+function label(t){
+  const [ic,name]=TYPE[t.type]||['⚠️',t.type||'ціль'];
+  const n=t.count&&t.count>1 ? t.count+' × ' : '';
+  return {ic, text:n+name};
+}
+
+function activeRaions(){
+  const s=new Set(alerts.raions.map(r=>nr(r.name)));
+  const o=new Set(alerts.oblasts.map(r=>no(r.name)));
+  return {s,o};
+}
+
+function visible(){
+  if(!filterObl) return threats;
+  return threats.filter(t=>no(t.region)===filterObl);
+}
+
+function render(){
+  if(!overlay) return;
+  const list=visible().filter(t=>t.lat!=null&&!t.areaOnly);
+  const {s,o}=activeRaions();
+  const L=[];
+
+  if(raionGeo) L.push(new GeoJsonLayer({
+    id:'raions', data:raionGeo, stroked:true, filled:true,
+    getFillColor:f=>{
+      const on = s.has(nr(f.properties.name)) || o.has(no(f.properties.oblast));
+      return on ? [196,52,28,58] : [40,48,56,20];
+    },
+    getLineColor:f=>{
+      const on = s.has(nr(f.properties.name)) || o.has(no(f.properties.oblast));
+      return on ? [214,80,54,170] : [70,82,94,55];
+    },
+    lineWidthMinPixels:.7, pickable:false,
+    updateTriggers:{getFillColor:[alerts],getLineColor:[alerts]}
+  }));
+
+  // вектор напрямку: коротка лінія від цілі туди, куди вона летить
+  const withDir=list.filter(t=>t.heading!=null);
+  if(withDir.length) L.push(new LineLayer({
+    id:'dir', data:withDir,
+    getSourcePosition:t=>[t.lon,t.lat],
+    getTargetPosition:t=>{
+      const r=t.heading*Math.PI/180, d=.22;
+      return [t.lon+Math.sin(r)*d/Math.cos(t.lat*Math.PI/180), t.lat+Math.cos(r)*d];
+    },
+    getColor:[240,150,90,150], getWidth:1.6, widthMinPixels:1.2
+  }));
+
+  L.push(new ScatterplotLayer({
+    id:'halo', data:list,
+    getPosition:t=>[t.lon,t.lat],
+    getRadius:t=>t.confidenceLevel==='high'?26000:18000,
+    radiusMinPixels:12, radiusMaxPixels:46,
+    getFillColor:[228,98,44,42], stroked:false, pickable:false
+  }));
+
+  L.push(new ScatterplotLayer({
+    id:'pts', data:list, pickable:true,
+    getPosition:t=>[t.lon,t.lat],
+    getRadius:6000, radiusMinPixels:5, radiusMaxPixels:14,
+    getFillColor:t=>t.confidenceLevel==='high'?[255,214,120,255]:[240,130,70,235],
+    stroked:true, lineWidthMinPixels:1.2, getLineColor:[18,22,26,220],
+    onHover:info=>{
+      const el=$('tip');
+      if(!info||!info.object){el.style.display='none';return;}
+      const t=info.object, l=label(t);
+      el.style.display='block';
+      el.style.left=Math.min(info.x+16,innerWidth-252)+'px';
+      el.style.top=(info.y+16)+'px';
+      el.innerHTML=`<b>${t.locality||t.region||'—'}</b><br>`
+        +`${l.ic} ${l.text}${dirFrom(t.heading)}<br>`
+        +`<span>джерел: ${t.sourceCount||0} · ${t.confidenceLevel||''}</span>`;
+    },
+    onClick:info=>{
+      if(info&&info.object&&mapRef)
+        mapRef.flyTo({center:[info.object.lon,info.object.lat],zoom:9,duration:800});
+    },
+    updateTriggers:{getFillColor:[threats]}
+  }));
+
+  if(mapRef&&mapRef.getZoom()>=7.5) L.push(new TextLayer({
+    id:'lbl', data:list,
+    getPosition:t=>[t.lon,t.lat],
+    getText:t=>t.locality||'',
+    getSize:12, getColor:[237,241,244,230], getPixelOffset:[0,-16],
+    fontFamily:'Inter, system-ui, sans-serif', fontWeight:600,
+    outlineWidth:3, outlineColor:[9,12,15,240], fontSettings:{sdf:true},
+    getTextAnchor:'middle', getAlignmentBaseline:'bottom', characterSet:'auto'
+  }));
+
+  overlay.setProps({layers:L});
+}
+
+function paintFeed(){
+  const list=visible().slice().sort((a,b)=>(b.sourceCount||0)-(a.sourceCount||0));
+  $('n-alerts').textContent=alerts.raions.length+alerts.oblasts.length;
+  $('n-threats').textContent=threats.length;
+  $('feedsub').textContent=filterObl
+    ? (list.length+' цілей у вибраній області') : 'усі області';
+  if(!list.length){
+    $('list').innerHTML='<div class="empty">Зараз цілей у повітрі немає.<br>'
+      +'Це не означає, що тривоги немає — перевірте офіційні джерела.</div>';
+    return;
+  }
+  $('list').innerHTML=list.map((t,i)=>{
+    const l=label(t);
+    const hi=t.confidenceLevel==='high';
+    return `<div class="row" data-i="${i}">
+      <div class="ic">${l.ic}</div>
+      <div>
+        <b>${t.locality||t.region||'—'}</b>
+        <div class="m">${l.text}${dirFrom(t.heading)}</div>
+        <div class="src">джерел: ${t.sourceCount||0}
+          <span class="badge${hi?' hi':''}">${hi?'підтверджено':'уточнюється'}</span>
+          ${t.areaOnly?'<span class="badge">лише область</span>':''}
+          ${t.advisory?'<span class="badge">спостереження</span>':''}
+        </div>
+      </div></div>`;
+  }).join('');
+  [...$('list').children].forEach(el=>{
+    el.onclick=()=>{
+      const t=list[+el.dataset.i];
+      if(t.lat!=null&&mapRef)
+        mapRef.flyTo({center:[t.lon,t.lat],zoom:9,duration:800});
+    };
+  });
+}
+
+function fillOblasts(){
+  const set=[...new Set(threats.map(t=>t.region).filter(Boolean))].sort();
+  const cur=$('obl').value;
+  $('obl').innerHTML='<option value="">Уся Україна</option>'
+    +set.map(o=>`<option value="${no(o)}">${o}</option>`).join('');
+  $('obl').value=cur;
+}
+
+function setLive(on,txt){
+  $('dot').className='dot'+(on?'':' off');
+  $('livetxt').textContent=txt;
+}
+
+async function pull(){
+  try{
+    const [t,a]=await Promise.all([
+      fetch(API+'/api/v1/threats').then(r=>r.json()),
+      fetch(API+'/api/v1/alerts').then(r=>r.json())]);
+    threats=t.threats||[];
+    alerts={raions:a.raions||[],oblasts:a.oblasts||[]};
+    fillOblasts(); paintFeed(); render();
+    setLive(true,'наживо');
+  }catch(e){ setLive(false,'немає зв\'язку'); }
+}
+
+function connect(){
+  let ws, delay=1000;
+  const open=()=>{
+    ws=new WebSocket('wss://neptun.in.ua/api/v1/stream');
+    ws.onopen=()=>{ delay=1000; setLive(true,'наживо'); pull(); };
+    ws.onmessage=ev=>{
+      const m=JSON.parse(ev.data);
+      if(m.type==='alerts'){
+        alerts={raions:m.data.raions||[],oblasts:m.data.oblasts||[]};
+      }else if(m.type==='upsert'){
+        const i=threats.findIndex(x=>x.id===m.data.id);
+        if(i>=0) threats[i]=m.data; else threats.push(m.data);
+      }else if(m.type==='remove'){
+        threats=threats.filter(x=>x.id!==m.data.id);
+      }else if(m.type==='snapshot'){
+        threats=m.data.threats||threats;
+      }else return;
+      fillOblasts(); paintFeed(); render();
+    };
+    // Обрив з'єднання — норма, тому перепідключення з наростанням паузи
+    // і обов'язковим ресинком: інакше пропустимо все, що сталось за розрив.
+    ws.onclose=()=>{
+      setLive(false,'перепідключення…');
+      setTimeout(open, delay);
+      delay=Math.min(delay*2,30000);
+    };
+    ws.onerror=()=>ws.close();
+  };
+  open();
+}
+
+$('obl').onchange=e=>{ filterObl=e.target.value; paintFeed(); render(); };
+
+const map=new maplibregl.Map({
+  container:'map',
+  style:'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+  center:[31.3,48.8], zoom:5.3, minZoom:4.5, maxZoom:12, dragRotate:false
+});
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right');
+overlay=new MapboxOverlay({interleaved:false,layers:[]});
+map.addControl(overlay);
+mapRef=map;
+let band=-1;
+map.on('zoomend',()=>{ const b=map.getZoom()>=7.5?1:0; if(b!==band){band=b;render();} });
+
+map.on('load',async()=>{
+  try{ raionGeo=await fetch('./raiony_alerts.geojson').then(r=>r.json()); }
+  catch(e){ raionGeo=null; }
+  await pull();
+  connect();
+  setInterval(pull, 90000);   // страховка, якщо стрім тихо помер
+});
+</script>
+</body></html>

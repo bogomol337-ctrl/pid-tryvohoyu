@@ -25,3 +25,4 @@ settlements.json
 .netlify/
 run.sh
 !raiony_alerts.geojson
+runbot.sh
